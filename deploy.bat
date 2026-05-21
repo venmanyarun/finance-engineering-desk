@@ -47,9 +47,11 @@ echo Dashboard will be available at: http://localhost:3000
 echo API Node running at: http://localhost:8080
 echo.
 
+cd ..
 :: Start Backend in background
 start "FED-BACKEND" /min mvn spring-boot:run
 
+cd frontend
 :: Start Frontend
 call npm run dev
 
