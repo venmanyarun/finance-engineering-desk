@@ -13,6 +13,7 @@ export function FinanceProvider({ children }) {
     const [obligations, setObligations] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [alerts, setAlerts] = useState([]);
+    const [portfolios, setPortfolios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState(null);
 
@@ -28,13 +29,14 @@ export function FinanceProvider({ children }) {
         }
         try {
             const headers = getAuthHeaders();
-            const [resMetrics, resAccounts, resIncomes, resObligations, resTransactions, resAlerts] = await Promise.all([
+            const [resMetrics, resAccounts, resIncomes, resObligations, resTransactions, resAlerts, resPortfolios] = await Promise.all([
                 fetch('http://localhost:8080/api/finance/dashboard-summary', { headers }).then(r => r.json()),
                 fetch('http://localhost:8080/api/finance/accounts', { headers }).then(r => r.json()),
                 fetch('http://localhost:8080/api/finance/income', { headers }).then(r => r.json()),
                 fetch('http://localhost:8080/api/finance/obligations', { headers }).then(r => r.json()),
                 fetch('http://localhost:8080/api/finance/transactions', { headers }).then(r => r.json()),
-                fetch('http://localhost:8080/api/finance/active-alerts?lookaheadDays=30', { headers }).then(r => r.json())
+                fetch('http://localhost:8080/api/finance/active-alerts?lookaheadDays=30', { headers }).then(r => r.json()),
+                fetch('http://localhost:8080/api/finance/portfolios', { headers }).then(r => r.json())
             ]);
             setMetrics(resMetrics);
             setAccounts(resAccounts);
@@ -42,6 +44,7 @@ export function FinanceProvider({ children }) {
             setObligations(resObligations);
             setTransactions(resTransactions);
             setAlerts(resAlerts);
+            setPortfolios(resPortfolios);
         } catch (err) {
             console.error("Secure ledger sync fault", err);
         } finally {
@@ -162,11 +165,86 @@ export function FinanceProvider({ children }) {
         await fetchCoreTelemetry();
     };
 
+    const savePortfolio = async (p) => {
+        const res = await fetch('http://localhost:8080/api/finance/portfolios', {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(p)
+        });
+        if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || 'Failed to create portfolio');
+        }
+        await fetchCoreTelemetry();
+    };
+
+    const deletePortfolio = async (id) => {
+        const res = await fetch(`http://localhost:8080/api/finance/portfolios/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || 'Failed to delete portfolio');
+        }
+        await fetchCoreTelemetry();
+    };
+
+    const saveHolding = async (portfolioId, h) => {
+        await fetch(`http://localhost:8080/api/finance/portfolios/${portfolioId}/holdings`, {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(h)
+        });
+        await fetchCoreTelemetry();
+    };
+
+    const fetchHoldings = async (portfolioId) => {
+        const res = await fetch(`http://localhost:8080/api/finance/portfolios/${portfolioId}/holdings`, { headers: getAuthHeaders() });
+        if (res.ok) return await res.json();
+        return [];
+    };
+
+    const getLatestPrice = async (symbol, exchange = '') => {
+        const res = await fetch(`http://localhost:8080/api/finance/market-prices?symbol=${encodeURIComponent(symbol)}&exchange=${encodeURIComponent(exchange)}`, { headers: getAuthHeaders() });
+        if (res.ok) return await res.json();
+        return null;
+    };
+
+    const uploadMarketPricesFile = (file, onProgress) => {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', 'http://localhost:8080/api/finance/market-prices/import-file');
+            const token = localStorage.getItem('token');
+            if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            xhr.upload.onprogress = (e) => { if (onProgress && e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+            xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(); else reject(xhr.responseText || xhr.statusText); };
+            xhr.onerror = () => reject('Network error');
+            const fd = new FormData();
+            fd.append('file', file);
+            xhr.send(fd);
+        });
+    };
+
+    const removeHolding = async (id) => {
+        const res = await fetch(`http://localhost:8080/api/finance/holdings/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || 'Failed to delete holding');
+        }
+        await fetchCoreTelemetry();
+    };
+
     return (
         <FinanceContext.Provider value={{
-            metrics, accounts, incomes, obligations, transactions, alerts, loading, user,
+            metrics, accounts, incomes, obligations, transactions, alerts, loading, user, portfolios,
             login, register, logout, saveAccount, removeAccount, saveIncome, removeIncome,
             saveObligation, removeObligation, recordEvent, saveManualTransaction,
+            savePortfolio, saveHolding, removeHolding, deletePortfolio,
+            fetchHoldings, getLatestPrice, uploadMarketPricesFile,
             fetchCoreTelemetry, getAuthHeaders
         }}>
             {children}

@@ -65,7 +65,7 @@ function ConsoleDashboard() {
     const { 
         metrics, accounts, incomes, obligations, transactions, alerts, loading, user, logout, 
         saveAccount, removeAccount, saveIncome, removeIncome, saveObligation, removeObligation, 
-        recordEvent, saveManualTransaction, getAuthHeaders 
+        recordEvent, saveManualTransaction, getAuthHeaders, savePortfolio, saveHolding, fetchHoldings, getLatestPrice, removeHolding, portfolios 
     } = useFinance();
 
     const [activeTab, setActiveTab] = useState('DASHBOARD');
@@ -212,7 +212,7 @@ function ConsoleDashboard() {
             </header>
 
             <nav style={{display: 'flex', gap: '8px', marginBottom: '32px', flexWrap: 'wrap'}}>
-                {['DASHBOARD', 'ACCOUNTS', 'INCOME', 'OBLIGATIONS', 'TRANSACTIONS', 'PROJECTIONS', 'RETIREMENT', 'DATA_MANAGEMENT'].map(tab => (
+                {['DASHBOARD', 'ACCOUNTS', 'PORTFOLIOS', 'INCOME', 'OBLIGATIONS', 'TRANSACTIONS', 'PROJECTIONS', 'RETIREMENT', 'DATA_MANAGEMENT'].map(tab => (
                     <button key={tab} className={activeTab === tab ? 'tab-btn active' : 'tab-btn'} onClick={() => {setActiveTab(tab); setSubTab('VIEW'); setEditingItem(null);}}>
                         {tab.charAt(0) + tab.slice(1).toLowerCase().replace('_', ' ')}
                     </button>
@@ -367,6 +367,39 @@ function ConsoleDashboard() {
                 </div>
             )}
 
+            {activeTab === 'PORTFOLIOS' && (
+                <div>
+                    <div className="workspace-panel" style={{padding:'20px', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white'}}>
+                        <h3 style={{color:'#1e3a8a'}}>📁 Portfolios</h3>
+                        <div style={{marginTop:12}}>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const data = Object.fromEntries(new FormData(e.target));
+                                try {
+                                    await savePortfolio({ name: data.name, currency: data.currency || 'INR' });
+                                    e.target.reset();
+                                } catch (err) {
+                                    console.error('Create portfolio failed', err);
+                                    alert('Create portfolio failed: ' + (err.message || err));
+                                }
+                            }}>
+                                <div style={{display:'flex', gap:8}}>
+                                    <input name="name" placeholder="Portfolio name" required />
+                                    <input name="currency" placeholder="Currency" defaultValue="INR" style={{width:100}} />
+                                    <button className="btn-primary">Create</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <div className="data-table-panel" style={{marginTop:16}}>
+                        <h4>Holdings</h4>
+                        {portfolios.map(p => (
+                            <PortfolioCard key={p.id} portfolio={p} saveHolding={saveHolding} fetchHoldings={fetchHoldings} getLatestPrice={getLatestPrice} removeHolding={removeHolding} />
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'INCOME' && (
                 <div>
                     {renderSubTabs()}
@@ -451,6 +484,9 @@ function ConsoleDashboard() {
                                 const formData = new FormData(form);
                                 const data = Object.fromEntries(formData.entries());
                                 data.retirementInstrument = form.retirementInstrument?.checked || false;
+                                // Map mutual-fund specific fields into referenceNo for SIP handling
+                                if ((!data.referenceNo || data.referenceNo === '') && data.sipSymbol) data.referenceNo = data.sipSymbol;
+                                if ((!data.referenceNo || data.referenceNo === '') && data.folio) data.referenceNo = data.folio;
                                 if (editingItem) data.id = editingItem.id;
                                 if (data.linkedAccount) {
                                     data.linkedAccount = { id: data.linkedAccount };
@@ -463,6 +499,8 @@ function ConsoleDashboard() {
                                 <FormField label="Description" tooltip="e.g. Loan Premium"><input type="text" name="instrumentName" defaultValue={editingItem?.instrumentName} required /></FormField>
                                 <FormField label="Institution" tooltip="Receiver"><input type="text" name="institutionName" defaultValue={editingItem?.institutionName} /></FormField>
                                 <FormField label="Reference Number" tooltip="Loan A/c or Policy No."><input type="text" name="referenceNo" defaultValue={editingItem?.referenceNo} /></FormField>
+                                <FormField label="SIP Symbol / Folio" tooltip="Mutual Fund symbol or folio number (optional)"><input type="text" name="sipSymbol" placeholder="E.g. HDFC-ELSS" /></FormField>
+                                <FormField label="Folio" tooltip="Mutual Fund folio number (optional)"><input type="text" name="folio" placeholder="Folio/Client ID" /></FormField>
                                 <FormField label="Registered Nominee" tooltip="Optional"><input type="text" name="nominee" defaultValue={editingItem?.nominee} /></FormField>
                                 <FormField label="Amount" tooltip="Installment cost"><input type="number" step="0.01" name="amount" defaultValue={editingItem?.amount} required /></FormField>
                                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
@@ -796,3 +834,107 @@ function ConsoleDashboard() {
 }
 
 export default function App() { return <FinanceProvider><ConsoleDashboard /></FinanceProvider>; }
+
+function PortfolioCard({ portfolio, saveHolding, fetchHoldings, getLatestPrice, removeHolding }) {
+    const [holdings, setHoldings] = React.useState([]);
+    const [marketValues, setMarketValues] = React.useState({ total: 0 });
+    const [uploadProgress, setUploadProgress] = React.useState(0);
+    const { uploadMarketPricesFile, deletePortfolio } = useFinance();
+
+    React.useEffect(() => {
+        const load = async () => {
+            const h = await fetchHoldings(portfolio.id);
+            setHoldings(h || []);
+            const detailed = await Promise.all((h || []).map(async (item) => {
+                try {
+                    const mp = await getLatestPrice(item.symbol, item.exchange || '');
+                    const price = mp ? Number(mp.price || mp) : (item.avgPrice || 0);
+                    return { ...item, latestPrice: price, value: Number(item.quantity || 0) * price };
+                } catch (e) { return { ...item, latestPrice: item.avgPrice || 0, value: Number(item.quantity || 0) * (item.avgPrice || 0) }; }
+            }));
+            let total = detailed.reduce((s, it) => s + (it.value || 0), 0);
+            setHoldings(detailed);
+            setMarketValues({ total });
+        };
+        load();
+    }, [portfolio.id, fetchHoldings, getLatestPrice]);
+
+    return (
+        <div style={{border:'1px solid #e2e8f0', borderRadius:8, padding:12, marginBottom:12}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div><strong>{portfolio.name}</strong> <div style={{fontSize:12,color:'#64748b'}}>{portfolio.currency}</div></div>
+                <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:12, color:'#64748b'}}>Portfolio Value</div>
+                    <div style={{fontWeight:700}}>₹{Math.round(marketValues.total).toLocaleString('en-IN')}</div>
+                </div>
+                <div style={{marginLeft:12}}>
+                    <button className="action-btn delete" onClick={async () => {
+                        if (!confirm(`Delete portfolio '${portfolio.name}' and all its holdings?`)) return;
+                        try {
+                            await deletePortfolio(portfolio.id);
+                        } catch (err) {
+                            console.error('Delete portfolio failed', err);
+                            alert('Delete portfolio failed: ' + (err.message || err));
+                        }
+                    }}>Delete Portfolio</button>
+                </div>
+            </div>
+            <div style={{marginTop:10}}>
+                <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    const data = Object.fromEntries(new FormData(e.target));
+                    await saveHolding(portfolio.id, { userId: data.userId || null, symbol: data.symbol, exchange: data.exchange, quantity: parseFloat(data.quantity || '0'), avgPrice: parseFloat(data.avgPrice || '0'), acquiredDate: data.acquiredDate });
+                    e.target.reset();
+                    const h = await fetchHoldings(portfolio.id);
+                    setHoldings(h || []);
+                }} style={{display:'flex', gap:8, marginTop:8}}>
+                    <input name="symbol" placeholder="Symbol (RELIANCE)" required />
+                    <input name="exchange" placeholder="Exchange (NSE)" defaultValue="NSE" style={{width:80}} />
+                    <input name="quantity" placeholder="Qty" style={{width:80}} />
+                    <input name="avgPrice" placeholder="Avg" style={{width:100}} />
+                    <button className="btn-primary">Add</button>
+                </form>
+            </div>
+            <div style={{marginTop:12}}>
+                <div style={{marginTop:8, marginBottom:8}}>
+                    <input type="file" accept="text/csv" onChange={async (ev) => {
+                        const f = ev.target.files && ev.target.files[0];
+                        if (!f) return;
+                        try {
+                            setUploadProgress(0);
+                            await uploadMarketPricesFile(f, percent => setUploadProgress(percent));
+                            setUploadProgress(100);
+                        } catch (err) {
+                            console.error('Upload failed', err);
+                        }
+                    }} />
+                    {uploadProgress > 0 && <div style={{marginTop:6}}>Upload: {uploadProgress}%</div>}
+                </div>
+                <table className="crud-table">
+                    <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Price</th><th>Value</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        {holdings.map(h => (
+                            <tr key={h.id}>
+                                <td>{h.symbol}</td>
+                                <td>{h.quantity}</td>
+                                <td>₹{Number(h.avgPrice || 0).toLocaleString('en-IN')}</td>
+                                <td>₹{Number(h.latestPrice || 0).toLocaleString('en-IN')}</td>
+                                <td style={{fontWeight:700}}>₹{Math.round(h.value || ((h.quantity || 0) * (h.latestPrice || h.avgPrice || 0))).toLocaleString('en-IN')}</td>
+                                <td><button className="action-btn delete" onClick={async () => {
+                                    try {
+                                        await removeHolding(h.id);
+                                        const nh = await fetchHoldings(portfolio.id);
+                                        setHoldings(nh || []);
+                                    } catch (err) {
+                                        console.error('Delete holding failed', err);
+                                        alert('Delete failed: ' + (err.message || err));
+                                    }
+                                }}>Drop</button></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}

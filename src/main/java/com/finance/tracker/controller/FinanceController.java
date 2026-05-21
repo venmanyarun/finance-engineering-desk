@@ -36,6 +36,9 @@ public class FinanceController {
     @Autowired private IncomeSourceRepository incomeRepository;
     @Autowired private TransactionRepository transactionRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private HoldingRepository holdingRepository;
+    @Autowired private PortfolioRepository portfolioRepository;
+    @Autowired private com.finance.tracker.service.MarketDataService marketDataService;
     @Autowired private DataExportImportService dataService;
     @Autowired private ProjectionService projectionService;
     @Autowired private ReportingService reportingService;
@@ -217,6 +220,51 @@ public class FinanceController {
             updateAccountBalance(obl.getLinkedAccount(), obl.getAmount().negate());
             obl.setNextDueDate(calculateNextDate(obl.getNextDueDate(), obl.getFrequency()));
             obligationRepository.save(obl);
+            // If this obligation is an investment SIP, record/update holding in default portfolio
+            try {
+                if (obl.getCategory() == RecurringObligation.ObligationCategory.INVESTMENT_SIP) {
+                    String raw = (obl.getReferenceNo() != null && !obl.getReferenceNo().isBlank()) ? obl.getReferenceNo() : obl.getInstrumentName();
+                    String symbol = normalizeSymbol(raw);
+                    Long uid = getCurrentUserId();
+                    // find or create default portfolio for user
+                    Portfolio portfolio = portfolioRepository.findByUserId(uid).stream().findFirst().orElseGet(() -> {
+                        Portfolio p = new Portfolio(); p.setUserId(uid); p.setName("Default Portfolio"); return portfolioRepository.save(p);
+                    });
+                    java.util.Optional<Holding> existing = holdingRepository.findByPortfolioIdAndSymbol(portfolio.getId(), symbol);
+                    java.math.BigDecimal price = marketDataService.getLatestPrice(symbol, "MF").orElse(java.math.BigDecimal.ZERO);
+                    java.math.BigDecimal qty = java.math.BigDecimal.ZERO;
+                    if (price.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                        qty = obl.getAmount().divide(price, 8, RoundingMode.HALF_UP);
+                    }
+                    if (existing.isPresent()) {
+                        Holding h = existing.get();
+                        java.math.BigDecimal existingQty = h.getQuantity() != null ? h.getQuantity() : java.math.BigDecimal.ZERO;
+                        java.math.BigDecimal existingAvg = h.getAvgPrice() != null ? h.getAvgPrice() : java.math.BigDecimal.ZERO;
+                        if (qty.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                            java.math.BigDecimal totalCost = existingAvg.multiply(existingQty).add(obl.getAmount());
+                            java.math.BigDecimal newQty = existingQty.add(qty);
+                            java.math.BigDecimal newAvg = newQty.compareTo(java.math.BigDecimal.ZERO) > 0 ? totalCost.divide(newQty, 8, RoundingMode.HALF_UP) : existingAvg;
+                            h.setQuantity(newQty);
+                            h.setAvgPrice(newAvg);
+                        } else {
+                            // price unavailable: increment a notional cost by adding to avgPrice weighted by cost
+                            // keep quantity unchanged
+                            h.setAvgPrice(existingAvg.add(obl.getAmount()));
+                        }
+                        holdingRepository.save(h);
+                    } else {
+                        Holding h = new Holding();
+                        h.setUserId(uid);
+                        h.setPortfolio(portfolio);
+                        h.setSymbol(symbol);
+                        h.setExchange("MF");
+                        h.setAcquiredDate(LocalDate.now());
+                        h.setQuantity(qty);
+                        h.setAvgPrice(qty.compareTo(java.math.BigDecimal.ZERO) > 0 ? obl.getAmount().divide(qty, 8, RoundingMode.HALF_UP) : obl.getAmount());
+                        holdingRepository.save(h);
+                    }
+                }
+            } catch (Exception ignored) {}
         }
         transactionRepository.save(tx);
         return ResponseEntity.ok(tx);
@@ -271,6 +319,14 @@ public class FinanceController {
             case YEARLY: return current.plusYears(1);
             default: return current;
         }
+    }
+
+    private String normalizeSymbol(String raw) {
+        if (raw == null) return "";
+        String s = raw.trim().toUpperCase();
+        s = s.replaceAll("\\s+", "-");
+        s = s.replaceAll("[^A-Z0-9-]", "");
+        return s;
     }
 
     @GetMapping("/transactions") public List<Transaction> getRecentTransactions() { return transactionRepository.findByUserIdOrderByTransactionDateDesc(getCurrentUserId()); }
