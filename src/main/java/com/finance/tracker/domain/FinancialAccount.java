@@ -53,6 +53,9 @@ public class FinancialAccount {
     private BigDecimal maturityAmount;
     private Double interestRate;
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean retirementAsset = false;
+
     @Column(precision = 15, scale = 2)
     private BigDecimal emiAmount;
     private Integer totalTenureMonths;
@@ -95,6 +98,8 @@ public class FinancialAccount {
     public void setMaturityAmount(BigDecimal maturityAmount) { this.maturityAmount = maturityAmount; }
     public Double getInterestRate() { return interestRate; }
     public void setInterestRate(Double interestRate) { this.interestRate = interestRate; }
+    public boolean isRetirementAsset() { return retirementAsset; }
+    public void setRetirementAsset(boolean retirementAsset) { this.retirementAsset = retirementAsset; }
     public BigDecimal getEmiAmount() { return emiAmount; }
     public void setEmiAmount(BigDecimal emiAmount) { this.emiAmount = emiAmount; }
     public Integer getTotalTenureMonths() { return totalTenureMonths; }

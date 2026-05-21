@@ -46,19 +46,40 @@ public class DataExportImportService {
             items.forEach(i -> i.setUserId(userId));
             accountRepository.saveAll(items);
         }
+
         if (data.containsKey("income")) {
             Iterable<IncomeSource> items = objectMapper.convertValue(data.get("income"), new TypeReference<Iterable<IncomeSource>>() {});
-            items.forEach(i -> i.setUserId(userId));
+            items.forEach(i -> {
+                i.setUserId(userId);
+                if (i.getDestinationAccount() != null && i.getDestinationAccount().getId() != null) {
+                    accountRepository.findById(i.getDestinationAccount().getId()).ifPresent(i::setDestinationAccount);
+                }
+            });
             incomeRepository.saveAll(items);
         }
+
         if (data.containsKey("obligations")) {
             Iterable<RecurringObligation> items = objectMapper.convertValue(data.get("obligations"), new TypeReference<Iterable<RecurringObligation>>() {});
-            items.forEach(i -> i.setUserId(userId));
+            items.forEach(i -> {
+                i.setUserId(userId);
+                if (i.getLinkedAccount() != null && i.getLinkedAccount().getId() != null) {
+                    accountRepository.findById(i.getLinkedAccount().getId()).ifPresent(i::setLinkedAccount);
+                }
+            });
             obligationRepository.saveAll(items);
         }
+
         if (data.containsKey("transactions")) {
             Iterable<Transaction> items = objectMapper.convertValue(data.get("transactions"), new TypeReference<Iterable<Transaction>>() {});
-            items.forEach(i -> i.setUserId(userId));
+            items.forEach(i -> {
+                i.setUserId(userId);
+                if (i.getSourceAccount() != null && i.getSourceAccount().getId() != null) {
+                    accountRepository.findById(i.getSourceAccount().getId()).ifPresent(i::setSourceAccount);
+                }
+                if (i.getDestinationAccount() != null && i.getDestinationAccount().getId() != null) {
+                    accountRepository.findById(i.getDestinationAccount().getId()).ifPresent(i::setDestinationAccount);
+                }
+            });
             transactionRepository.saveAll(items);
         }
     }

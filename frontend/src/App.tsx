@@ -75,12 +75,13 @@ function ConsoleDashboard() {
     const [forecast, setForecast] = useState([]);
     const [startMonth, setStartMonth] = useState('');
     const [endMonth, setEndMonth] = useState('');
+    const [retirementProjection, setRetirementProjection] = useState(null);
     const [oblSortKey, setOblSortKey] = useState('instrumentName');
 
     const todayStr = new Date().toISOString().split('T')[0];
 
     useEffect(() => {
-        if (activeTab === 'PROJECTIONS' || activeTab === 'DASHBOARD' || activeTab === 'INCOME' || activeTab === 'OBLIGATIONS') {
+        if (activeTab === 'PROJECTIONS' || activeTab === 'RETIREMENT' || activeTab === 'DASHBOARD' || activeTab === 'INCOME' || activeTab === 'OBLIGATIONS') {
             const fetchForecast = async () => {
                 const res = await fetch(`http://localhost:8080/api/finance/forecast?years=30`, { headers: getAuthHeaders() });
                 if (res.ok) {
@@ -95,6 +96,22 @@ function ConsoleDashboard() {
             fetchForecast();
         }
     }, [activeTab, user, getAuthHeaders, incomes, obligations, startMonth]);
+
+    useEffect(() => {
+        const fetchRetirementProjection = async () => {
+            if (activeTab !== 'RETIREMENT' || !startMonth || !endMonth) {
+                setRetirementProjection(null);
+                return;
+            }
+            const res = await fetch(`http://localhost:8080/api/finance/retirement-projection?fromMonth=${startMonth}&toMonth=${endMonth}`, { headers: getAuthHeaders() });
+            if (res.ok) {
+                setRetirementProjection(await res.json());
+            } else {
+                setRetirementProjection(null);
+            }
+        };
+        fetchRetirementProjection();
+    }, [activeTab, startMonth, endMonth, getAuthHeaders, accounts, obligations, user]);
 
     const chartData = useMemo(() => {
         let cumulativeNetWorth = metrics.netWorth || 0;
@@ -195,7 +212,7 @@ function ConsoleDashboard() {
             </header>
 
             <nav style={{display: 'flex', gap: '8px', marginBottom: '32px', flexWrap: 'wrap'}}>
-                {['DASHBOARD', 'ACCOUNTS', 'INCOME', 'OBLIGATIONS', 'TRANSACTIONS', 'PROJECTIONS', 'DATA_MANAGEMENT'].map(tab => (
+                {['DASHBOARD', 'ACCOUNTS', 'INCOME', 'OBLIGATIONS', 'TRANSACTIONS', 'PROJECTIONS', 'RETIREMENT', 'DATA_MANAGEMENT'].map(tab => (
                     <button key={tab} className={activeTab === tab ? 'tab-btn active' : 'tab-btn'} onClick={() => {setActiveTab(tab); setSubTab('VIEW'); setEditingItem(null);}}>
                         {tab.charAt(0) + tab.slice(1).toLowerCase().replace('_', ' ')}
                     </button>
@@ -281,7 +298,9 @@ function ConsoleDashboard() {
                             <h3>{editingItem ? 'Edit Account' : 'Register Account'}</h3>
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
-                                const data = Object.fromEntries(new FormData(e.target));
+                                const form = e.target;
+                                const data = Object.fromEntries(new FormData(form));
+                                data.retirementAsset = form.retirementAsset?.checked || false;
                                 if (editingItem) data.id = editingItem.id;
                                 await saveAccount(data);
                                 setSubTab('VIEW'); setEditingItem(null);
@@ -300,6 +319,12 @@ function ConsoleDashboard() {
                                         <option value="RETIREMENT">Retirement</option>
                                         <option value="LIABILITIES">Liabilities</option>
                                     </select>
+                                </FormField>
+                                <FormField label="Retirement Asset" tooltip="Include this account in retirement projections">
+                                    <label style={{display:'inline-flex', alignItems:'center', gap:'8px'}}>
+                                        <input type="checkbox" name="retirementAsset" defaultChecked={editingItem?.retirementAsset || false} />
+                                        Consider this a retirement account
+                                    </label>
                                 </FormField>
                                 <FormField label="Account Type" tooltip="Specific product">
                                     <select name="accountType" defaultValue={editingItem?.accountType || 'SAVINGS_ACCOUNT'}>
@@ -321,7 +346,11 @@ function ConsoleDashboard() {
                                 <tbody>
                                     {accounts.map(acc => (
                                         <tr key={acc.id}>
-                                            <td><strong>{acc.name}</strong><br/><small>{acc.accountNo}</small></td>
+                                            <td>
+                                            <strong>{acc.name}</strong><br/>
+                                            <small>{acc.accountNo}</small>
+                                            {acc.retirementAsset && <div style={{marginTop:'6px', fontSize:'11px', color:'#047857'}}>Retirement Asset</div>}
+                                        </td>
                                             <td>{acc.institution}</td>
                                             <td><span className="category-badge">{acc.assetClass}</span></td>
                                             <td style={{fontWeight:'700'}}>₹{acc.balance?.toLocaleString('en-IN')}</td>
@@ -418,8 +447,10 @@ function ConsoleDashboard() {
                             <h3>Register Obligation</h3>
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
-                                const formData = new FormData(e.target);
+                                const form = e.target;
+                                const formData = new FormData(form);
                                 const data = Object.fromEntries(formData.entries());
+                                data.retirementInstrument = form.retirementInstrument?.checked || false;
                                 if (editingItem) data.id = editingItem.id;
                                 if (data.linkedAccount) {
                                     data.linkedAccount = { id: data.linkedAccount };
@@ -466,7 +497,12 @@ function ConsoleDashboard() {
                                         {accounts.filter(a => a.assetClass !== 'LIABILITIES').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                     </select>
                                 </FormField>
-                                
+                                <FormField label="Retirement Instrument" tooltip="Include payouts in retirement projection">
+                                    <label style={{display:'inline-flex', alignItems:'center', gap:'8px'}}>
+                                        <input type="checkbox" name="retirementInstrument" defaultChecked={editingItem?.retirementInstrument || false} />
+                                        Consider this obligation as part of retirement planning
+                                    </label>
+                                </FormField>
                                 <h4 style={{marginTop:'20px', borderTop:'1px solid #e2e8f0', paddingTop:'15px', color:'#1e3a8a'}}>Insurance & Maturity Details (Optional)</h4>
                                 <FormField label="Death Benefit / Sum Assured" tooltip="One-time payout to family"><input type="number" step="1" name="deathBenefitAmount" defaultValue={editingItem?.deathBenefitAmount} placeholder="₹" /></FormField>
                                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
@@ -529,7 +565,11 @@ function ConsoleDashboard() {
                                         const ann = amountVal * factor;
                                         return (
                                             <tr key={obl.id}>
-                                                <td><strong>{obl.instrumentName}</strong><br/><small>{obl.referenceNo}</small></td>
+                                                <td>
+                                                    <strong>{obl.instrumentName}</strong><br/>
+                                                    <small>{obl.referenceNo}</small>
+                                                    {obl.retirementInstrument && <div style={{marginTop:'4px', fontSize:'11px', color:'#047857'}}>Retirement</div>}
+                                                </td>
                                                 <td>{obl.frequency}</td>
                                                 <td style={{color:'#ef4444'}}>₹{amountVal.toLocaleString('en-IN')}</td>
                                                 <td style={{fontWeight:'700'}}>₹{ann.toLocaleString('en-IN')}</td>
@@ -670,6 +710,86 @@ function ConsoleDashboard() {
                 </div>
             )}
 
+            {activeTab === 'RETIREMENT' && (
+                <div style={{display:'grid', gap:'24px'}}>
+                    <div className="workspace-panel" style={{padding:'20px', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+                            <h3 style={{color:'#1e3a8a'}}>🧭 Retirement Projection</h3>
+                            <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
+                                <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                                    <label style={{fontSize:'13px', fontWeight:'600'}}>From:</label>
+                                    <select value={startMonth} onChange={e => setStartMonth(e.target.value)} style={{padding:'6px 10px', borderRadius:'6px', border:'1px solid #cbd5e1'}}>
+                                        {forecast.map(f => <option key={f.date} value={f.date}>{f.date}</option>)}
+                                    </select>
+                                </div>
+                                <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                                    <label style={{fontSize:'13px', fontWeight:'600'}}>To:</label>
+                                    <select value={endMonth} onChange={e => setEndMonth(e.target.value)} style={{padding:'6px 10px', borderRadius:'6px', border:'1px solid #cbd5e1'}}>
+                                        {forecast.map(f => <option key={f.date} value={f.date}>{f.date}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'20px'}}>
+                            <div className="metric-display-panel" style={{background:'#f0fdf4', border:'1px solid #d1fae5'}}>
+                                <label className="panel-label">Retirement Account Balance</label>
+                                <h3 className="panel-amount" style={{color:'#15803d'}}>₹{retirementProjection?.retirementAccountBalance?.toLocaleString('en-IN') || 0}</h3>
+                                <div style={{fontSize:11, color:'#64748b'}}>Current balances from retirement-marked accounts</div>
+                            </div>
+                            <div className="metric-display-panel" style={{background:'#eff6ff', border:'1px solid #bfdbfe'}}>
+                                <label className="panel-label">Projected Retirement Income</label>
+                                <h3 className="panel-amount" style={{color:'#1e40af'}}>₹{(retirementProjection?.projectedRecurringIncome || 0)?.toLocaleString('en-IN')}</h3>
+                                <div style={{fontSize:11, color:'#64748b'}}>Recurring annuity and maturity income in range</div>
+                            </div>
+                            <div className="metric-display-panel" style={{background:'#fef2f2', border:'1px solid #fee2e2'}}>
+                                <label className="panel-label">Projected Lump Sum</label>
+                                <h3 className="panel-amount" style={{color:'#be123c'}}>₹{(retirementProjection?.projectedLumpSum || 0)?.toLocaleString('en-IN')}</h3>
+                                <div style={{fontSize:11, color:'#64748b'}}>Maturity payouts expected in selected window</div>
+                            </div>
+                            <div className="metric-display-panel" style={{background:'#fff7ed', border:'1px solid #fed7aa'}}>
+                                <label className="panel-label">Total Retirement Projection</label>
+                                <h3 className="panel-amount" style={{color:'#c2410c'}}>₹{(retirementProjection?.totalProjectedRetirement || 0)?.toLocaleString('en-IN')}</h3>
+                                <div style={{fontSize:11, color:'#64748b'}}>Current retirement balance plus future inflows</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="data-table-panel" style={{borderRadius:'12px'}}>
+                        <h4 style={{padding:'15px', borderBottom:'1px solid #e2e8f0', background:'#f8fafc'}}>📌 Retirement Breakdown</h4>
+                        <div style={{display:'grid', gap:'20px', padding:'15px'}}>
+                            <div>
+                                <h5>Retirement Accounts</h5>
+                                <table className="crud-table">
+                                    <thead><tr><th>Name</th><th>Institution</th><th>Balance</th></tr></thead>
+                                    <tbody>
+                                        {retirementProjection?.retirementAccounts?.length ? retirementProjection.retirementAccounts.map((account, idx) => (
+                                            <tr key={idx}>
+                                                <td>{account.name}</td>
+                                                <td>{account.institution}</td>
+                                                <td style={{fontWeight:'700'}}>₹{Number(account.balance || 0).toLocaleString('en-IN')}</td>
+                                            </tr>
+                                        )) : <tr><td colSpan={3} style={{color:'#64748b', padding:'12px'}}>No retirement accounts selected.</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div>
+                                <h5>Retirement Instruments</h5>
+                                <table className="crud-table">
+                                    <thead><tr><th>Obligation</th><th>Recurring Income</th><th>Lump Sum</th></tr></thead>
+                                    <tbody>
+                                        {retirementProjection?.retirementObligations?.length ? retirementProjection.retirementObligations.map((obl, idx) => (
+                                            <tr key={idx}>
+                                                <td>{obl.instrumentName}</td>
+                                                <td style={{color:'#1e40af'}}>₹{Number(obl.projectedRecurringIncome || 0).toLocaleString('en-IN')}</td>
+                                                <td style={{color:'#be123c'}}>₹{Number(obl.projectedLumpSum || 0).toLocaleString('en-IN')}</td>
+                                            </tr>
+                                        )) : <tr><td colSpan={3} style={{color:'#64748b', padding:'12px'}}>No retirement obligations defined.</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             {activeTab === 'DATA_MANAGEMENT' && <ImportExport />}
         </div>
     );

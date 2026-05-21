@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -311,6 +312,7 @@ public class FinanceController {
         try { if (payload.get("maturityIncomeStartDate") != null && !payload.get("maturityIncomeStartDate").toString().isBlank()) o.setMaturityIncomeStartDate(LocalDate.parse(payload.get("maturityIncomeStartDate").toString())); } catch (Exception ignored) {}
         try { if (payload.get("maturityIncomeDurationYears") != null && !payload.get("maturityIncomeDurationYears").toString().isBlank()) o.setMaturityIncomeDurationYears(Integer.valueOf(payload.get("maturityIncomeDurationYears").toString())); } catch (Exception ignored) {}
         try { if (payload.get("maturityIncomeFrequency") != null && !payload.get("maturityIncomeFrequency").toString().isBlank()) o.setMaturityIncomeFrequency(RecurringObligation.PaymentFrequency.valueOf(payload.get("maturityIncomeFrequency").toString())); } catch (Exception ignored) {}
+        try { if (payload.get("retirementInstrument") != null) o.setRetirementInstrument(parseBooleanValue(payload.get("retirementInstrument"))); } catch (Exception ignored) {}
         try { if (payload.get("deathBenefitAmount") != null && !payload.get("deathBenefitAmount").toString().isBlank()) o.setDeathBenefitAmount(new BigDecimal(payload.get("deathBenefitAmount").toString())); } catch (Exception ignored) {}
         try { if (payload.get("lumpSumMaturityAmount") != null && !payload.get("lumpSumMaturityAmount").toString().isBlank()) o.setLumpSumMaturityAmount(new BigDecimal(payload.get("lumpSumMaturityAmount").toString())); } catch (Exception ignored) {}
         try { if (payload.get("lumpSumMaturityDate") != null && !payload.get("lumpSumMaturityDate").toString().isBlank()) o.setLumpSumMaturityDate(LocalDate.parse(payload.get("lumpSumMaturityDate").toString())); } catch (Exception ignored) {}
@@ -319,5 +321,19 @@ public class FinanceController {
     }
     @DeleteMapping("/obligations/{id}") public void deleteObligation(@PathVariable Long id) { obligationRepository.deleteById(id); }
     @GetMapping("/export") public ResponseEntity<String> exportData() throws IOException { return ResponseEntity.ok(dataService.exportDataToJson()); }
+    @GetMapping("/retirement-projection")
+    public ProjectionService.RetirementProjection getRetirementProjection(
+            @RequestParam String fromMonth,
+            @RequestParam String toMonth) {
+        YearMonth from = YearMonth.parse(fromMonth);
+        YearMonth to = YearMonth.parse(toMonth);
+        return projectionService.getRetirementProjection(from, to, getCurrentUserId());
+    }
     @PostMapping("/import") public ResponseEntity<String> importData(@RequestBody String json) { try { dataService.importDataFromJson(json); return ResponseEntity.ok("Import successful"); } catch (Exception e) { return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage()); } }
+
+    private boolean parseBooleanValue(Object value) {
+        if (value == null) return false;
+        String str = value.toString().trim();
+        return "true".equalsIgnoreCase(str) || "yes".equalsIgnoreCase(str) || "on".equalsIgnoreCase(str) || "1".equals(str);
+    }
 }

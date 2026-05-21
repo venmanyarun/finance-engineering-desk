@@ -46,6 +46,9 @@ public class RecurringObligation {
     @JoinColumn(name = "linked_account_id")
     private FinancialAccount linkedAccount;
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean retirementInstrument = false;
+
     // Guaranteed Returns / Survival Benefits
     private BigDecimal maturityIncomeAmount; 
     private LocalDate maturityIncomeStartDate;
@@ -107,6 +110,8 @@ public class RecurringObligation {
     public void setCategory(ObligationCategory category) { this.category = category; }
     public FinancialAccount getLinkedAccount() { return linkedAccount; }
     public void setLinkedAccount(FinancialAccount linkedAccount) { this.linkedAccount = linkedAccount; }
+    public boolean isRetirementInstrument() { return retirementInstrument; }
+    public void setRetirementInstrument(boolean retirementInstrument) { this.retirementInstrument = retirementInstrument; }
     public BigDecimal getMaturityIncomeAmount() { return maturityIncomeAmount; }
     public void setMaturityIncomeAmount(BigDecimal maturityIncomeAmount) { this.maturityIncomeAmount = maturityIncomeAmount; }
     public LocalDate getMaturityIncomeStartDate() { return maturityIncomeStartDate; }

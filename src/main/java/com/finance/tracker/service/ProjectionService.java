@@ -17,6 +17,8 @@ public class ProjectionService {
     private IncomeSourceRepository incomeRepository;
     @Autowired
     private RecurringObligationRepository obligationRepository;
+    @Autowired
+    private FinancialAccountRepository accountRepository;
 
     public static class MonthlySnapshot {
         public String month;
@@ -42,6 +44,82 @@ public class ProjectionService {
             this.netOutflow = netOutflow;
             this.description = description;
         }
+    }
+
+    public static class RetirementProjection {
+        public BigDecimal retirementAccountBalance = BigDecimal.ZERO;
+        public BigDecimal projectedRecurringIncome = BigDecimal.ZERO;
+        public BigDecimal projectedLumpSum = BigDecimal.ZERO;
+        public BigDecimal totalProjectedRetirement = BigDecimal.ZERO;
+        public List<Map<String, Object>> retirementAccounts = new ArrayList<>();
+        public List<Map<String, Object>> retirementObligations = new ArrayList<>();
+    }
+
+    public RetirementProjection getRetirementProjection(YearMonth fromMonth, YearMonth toMonth, Long userId) {
+        YearMonth startYm = fromMonth.compareTo(toMonth) <= 0 ? fromMonth : toMonth;
+        YearMonth endYm = fromMonth.compareTo(toMonth) <= 0 ? toMonth : fromMonth;
+        LocalDate windowStart = startYm.atDay(1);
+        LocalDate windowEnd = endYm.atEndOfMonth();
+
+        RetirementProjection projection = new RetirementProjection();
+
+        List<FinancialAccount> accounts = accountRepository.findByUserId(userId);
+        for (FinancialAccount account : accounts) {
+            if (account.isRetirementAsset()) {
+                BigDecimal bal = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+                projection.retirementAccountBalance = projection.retirementAccountBalance.add(bal);
+                Map<String, Object> accountDetail = new HashMap<>();
+                accountDetail.put("name", account.getName());
+                accountDetail.put("balance", bal);
+                accountDetail.put("institution", account.getInstitution());
+                projection.retirementAccounts.add(accountDetail);
+            }
+        }
+
+        List<RecurringObligation> obligations = obligationRepository.findByUserId(userId);
+        for (RecurringObligation obligation : obligations) {
+            if (!obligation.isRetirementInstrument()) continue;
+            BigDecimal incomeTotal = BigDecimal.ZERO;
+            BigDecimal lumpTotal = BigDecimal.ZERO;
+            Map<String, Object> obligationDetail = new HashMap<>();
+            obligationDetail.put("instrumentName", obligation.getInstrumentName());
+            obligationDetail.put("category", obligation.getCategory());
+
+            if (obligation.getMaturityIncomeAmount() != null && obligation.getMaturityIncomeAmount().compareTo(BigDecimal.ZERO) > 0 && obligation.getMaturityIncomeStartDate() != null) {
+                LocalDate current = obligation.getMaturityIncomeStartDate();
+                LocalDate maturityEnd = obligation.getMaturityIncomeDurationYears() != null
+                        ? obligation.getMaturityIncomeStartDate().plusYears(obligation.getMaturityIncomeDurationYears())
+                        : null;
+                while (!current.isAfter(windowEnd)) {
+                    if (!current.isBefore(windowStart) && (maturityEnd == null || !current.isAfter(maturityEnd))) {
+                        incomeTotal = incomeTotal.add(obligation.getMaturityIncomeAmount());
+                    }
+                    if (obligation.getMaturityIncomeFrequency() == RecurringObligation.PaymentFrequency.ONE_TIME) break;
+                    current = advanceDate(current, obligation.getMaturityIncomeFrequency());
+                    if (maturityEnd != null && current.isAfter(maturityEnd)) break;
+                }
+            }
+
+            if (obligation.getLumpSumMaturityAmount() != null && obligation.getLumpSumMaturityDate() != null) {
+                LocalDate payout = obligation.getLumpSumMaturityDate();
+                if (!payout.isBefore(windowStart) && !payout.isAfter(windowEnd)) {
+                    lumpTotal = lumpTotal.add(obligation.getLumpSumMaturityAmount());
+                }
+            }
+
+            if (incomeTotal.compareTo(BigDecimal.ZERO) > 0 || lumpTotal.compareTo(BigDecimal.ZERO) > 0) {
+                obligationDetail.put("projectedRecurringIncome", incomeTotal);
+                obligationDetail.put("projectedLumpSum", lumpTotal);
+                projection.projectedRecurringIncome = projection.projectedRecurringIncome.add(incomeTotal);
+                projection.projectedLumpSum = projection.projectedLumpSum.add(lumpTotal);
+                projection.retirementObligations.add(obligationDetail);
+            }
+        }
+
+        projection.totalProjectedRetirement = projection.retirementAccountBalance
+                .add(projection.projectedRecurringIncome)
+                .add(projection.projectedLumpSum);
+        return projection;
     }
 
     public List<CashFlowPoint> getForecast(int years, Long userId) {
@@ -139,6 +217,7 @@ public class ProjectionService {
         return switch (freq) {
             case QUARTERLY -> date.plusMonths(3);
             case YEARLY -> date.plusYears(1);
+            case ONE_TIME -> date;
             default -> date.plusMonths(1);
         };
     }
