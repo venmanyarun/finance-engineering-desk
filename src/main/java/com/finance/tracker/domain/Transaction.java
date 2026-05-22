@@ -33,6 +33,9 @@ public class Transaction {
     @Enumerated(EnumType.STRING)
     private TransactionType type;
 
+    @Enumerated(EnumType.STRING)
+    private ExpenseCategory category;
+
     @ManyToOne
     @JoinColumn(name = "source_account_id")
     private FinancialAccount sourceAccount;
@@ -47,6 +50,13 @@ public class Transaction {
 
     public enum TransactionType {
         INCOME, EXPENSE, TRANSFER, INVESTMENT, INSURANCE_PREMIUM, LOAN_REPAYMENT
+    }
+
+    public enum ExpenseCategory {
+        FOOD, BILLS, TRANSPORT, HEALTH, ENTERTAINMENT, RENT, SHOPPING, GROCERIES, UTILITIES,
+        HOUSEHOLD_EXPENSE, LOAN_EMI, INVESTMENT_SIP, TAX_PAYMENT, SUBSCRIPTION,
+        GUARANTEED_RETURN, ULIP, HEALTH_INSURANCE, LIFE_INSURANCE, VEHICLE_INSURANCE,
+        OTHER
     }
 
     public Transaction() {}
@@ -64,6 +74,8 @@ public class Transaction {
     public void setDescription(String description) { this.description = description; }
     public TransactionType getType() { return type; }
     public void setType(TransactionType type) { this.type = type; }
+    public ExpenseCategory getCategory() { return category; }
+    public void setCategory(ExpenseCategory category) { this.category = category; }
     public FinancialAccount getSourceAccount() { return sourceAccount; }
     public void setSourceAccount(FinancialAccount sourceAccount) { this.sourceAccount = sourceAccount; }
     public FinancialAccount getDestinationAccount() { return destinationAccount; }

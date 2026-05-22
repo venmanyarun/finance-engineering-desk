@@ -1,7 +1,7 @@
 Export / Import
 
 Overview
-- The app supports exporting the entire ledger to a portable JSON and importing it back. This preserves accounts, incomes, obligations, transactions, and portfolios.
+- The app supports exporting the entire ledger to a portable JSON and importing it back. This preserves accounts, incomes, obligations, and transactions.
 
 Frontend
 - Use the `DATA_MANAGEMENT` tab to export JSON or upload a JSON backup.

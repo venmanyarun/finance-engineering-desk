@@ -65,13 +65,14 @@ function ConsoleDashboard() {
     const { 
         metrics, accounts, incomes, obligations, transactions, alerts, loading, user, logout, 
         saveAccount, removeAccount, saveIncome, removeIncome, saveObligation, removeObligation, 
-        recordEvent, saveManualTransaction, removeTransaction, getAuthHeaders, savePortfolio, saveHolding, fetchHoldings, getLatestPrice, removeHolding, portfolios 
+        recordEvent, saveManualTransaction, removeTransaction, getAuthHeaders 
     } = useFinance();
 
     const [activeTab, setActiveTab] = useState('DASHBOARD');
     const [subTab, setSubTab] = useState('VIEW');
     const [editingItem, setEditingItem] = useState(null);
     const [categoryTab, setCategoryTab] = useState('ALL');
+    const [txCategoryFilter, setTxCategoryFilter] = useState('ALL');
     const [forecast, setForecast] = useState([]);
     const [startMonth, setStartMonth] = useState('');
     const [endMonth, setEndMonth] = useState('');
@@ -191,6 +192,23 @@ function ConsoleDashboard() {
         return summary;
     }, [obligations]);
 
+    const transactionCategorySummary = useMemo(() => {
+        const summary = { ALL: { count: transactions.length, total: 0 } };
+        transactions.forEach(tx => {
+            const category = tx.category || 'UNCATEGORIZED';
+            if (!summary[category]) summary[category] = { count: 0, total: 0 };
+            summary[category].count++;
+            summary[category].total += typeof tx.amount === 'number' ? tx.amount : parseFloat(tx.amount || '0');
+            summary.ALL.total += typeof tx.amount === 'number' ? tx.amount : parseFloat(tx.amount || '0');
+        });
+        return summary;
+    }, [transactions]);
+
+    const filteredTransactions = useMemo(() => {
+        if (txCategoryFilter === 'ALL') return transactions;
+        return transactions.filter(tx => (tx.category || 'UNCATEGORIZED') === txCategoryFilter);
+    }, [transactions, txCategoryFilter]);
+
     if (loading) return <div>Initialising Console...</div>;
     if (!user) return <AuthForms />;
 
@@ -212,7 +230,7 @@ function ConsoleDashboard() {
             </header>
 
             <nav style={{display: 'flex', gap: '8px', marginBottom: '32px', flexWrap: 'wrap'}}>
-                {['DASHBOARD', 'ACCOUNTS', 'PORTFOLIOS', 'INCOME', 'OBLIGATIONS', 'TRANSACTIONS', 'PROJECTIONS', 'RETIREMENT', 'DATA_MANAGEMENT'].map(tab => (
+                {['DASHBOARD', 'ACCOUNTS', 'INCOME', 'OBLIGATIONS', 'TRANSACTIONS', 'PROJECTIONS', 'RETIREMENT', 'DATA_MANAGEMENT'].map(tab => (
                     <button key={tab} className={activeTab === tab ? 'tab-btn active' : 'tab-btn'} onClick={() => {setActiveTab(tab); setSubTab('VIEW'); setEditingItem(null);}}>
                         {tab.charAt(0) + tab.slice(1).toLowerCase().replace('_', ' ')}
                     </button>
@@ -367,38 +385,6 @@ function ConsoleDashboard() {
                 </div>
             )}
 
-            {activeTab === 'PORTFOLIOS' && (
-                <div>
-                    <div className="workspace-panel" style={{padding:'20px', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white'}}>
-                        <h3 style={{color:'#1e3a8a'}}>📁 Portfolios</h3>
-                        <div style={{marginTop:12}}>
-                            <form onSubmit={async (e) => {
-                                e.preventDefault();
-                                const data = Object.fromEntries(new FormData(e.target));
-                                try {
-                                    await savePortfolio({ name: data.name, currency: data.currency || 'INR' });
-                                    e.target.reset();
-                                } catch (err) {
-                                    console.error('Create portfolio failed', err);
-                                    alert('Create portfolio failed: ' + (err.message || err));
-                                }
-                            }}>
-                                <div style={{display:'flex', gap:8}}>
-                                    <input name="name" placeholder="Portfolio name" required />
-                                    <input name="currency" placeholder="Currency" defaultValue="INR" style={{width:100}} />
-                                    <button className="btn-primary">Create</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                    <div className="data-table-panel" style={{marginTop:16}}>
-                        <h4>Holdings</h4>
-                        {portfolios.map(p => (
-                            <PortfolioCard key={p.id} portfolio={p} saveHolding={saveHolding} fetchHoldings={fetchHoldings} getLatestPrice={getLatestPrice} removeHolding={removeHolding} />
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {activeTab === 'INCOME' && (
                 <div>
@@ -635,6 +621,24 @@ function ConsoleDashboard() {
 
             {activeTab === 'TRANSACTIONS' && (
                 <div className="crud-container">
+                    <div className="metric-display-panel" style={{marginBottom:'20px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px'}}>
+                        <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                            <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Current Month Spend</div>
+                            <div style={{fontSize:'28px', fontWeight:'800'}}>₹{metrics.monthlyExpenseTotal?.toLocaleString('en-IN') || '0'}</div>
+                        </div>
+                        <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                            <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Top Expense Categories</div>
+                            <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+                                {Object.entries(metrics.monthlyExpenseByCategory || {}).sort((a,b) => Number(b[1]) - Number(a[1])).slice(0,4).map(([key, value]) => (
+                                    <div key={key} style={{display:'flex', justifyContent:'space-between', fontSize:'12px'}}>
+                                        <span>{key.replace(/_/g, ' ')}</span>
+                                        <strong>₹{Number(value).toLocaleString('en-IN')}</strong>
+                                    </div>
+                                ))}
+                                {Object.keys(metrics.monthlyExpenseByCategory || {}).length === 0 && <div style={{fontSize:'12px', color:'#94a3b8'}}>No categorized spend recorded yet.</div>}
+                            </div>
+                        </div>
+                    </div>
                     <div className="form-panel">
                         <h3>➕ Manual Transaction</h3>
                         <form onSubmit={async (e) => {
@@ -653,6 +657,31 @@ function ConsoleDashboard() {
                                     <option value="TRANSFER">Transfer</option>
                                 </select>
                             </FormField>
+                            <FormField label="Expense Category" tooltip="Optional classification for spend tracking">
+                                <select name="category">
+                                    <option value="">Uncategorized</option>
+                                    <option value="FOOD">Food</option>
+                                    <option value="BILLS">Bills</option>
+                                    <option value="TRANSPORT">Transport</option>
+                                    <option value="HEALTH">Health</option>
+                                    <option value="ENTERTAINMENT">Entertainment</option>
+                                    <option value="RENT">Rent</option>
+                                    <option value="SHOPPING">Shopping</option>
+                                    <option value="GROCERIES">Groceries</option>
+                                    <option value="UTILITIES">Utilities</option>
+                                    <option value="HOUSEHOLD_EXPENSE">Household Expense</option>
+                                    <option value="LOAN_EMI">Loan EMI</option>
+                                    <option value="INVESTMENT_SIP">Investment SIP</option>
+                                    <option value="TAX_PAYMENT">Tax Payment</option>
+                                    <option value="SUBSCRIPTION">Subscription</option>
+                                    <option value="GUARANTEED_RETURN">Guaranteed Return</option>
+                                    <option value="ULIP">ULIP</option>
+                                    <option value="HEALTH_INSURANCE">Health Insurance</option>
+                                    <option value="LIFE_INSURANCE">Life Insurance</option>
+                                    <option value="VEHICLE_INSURANCE">Vehicle Insurance</option>
+                                    <option value="OTHER">Other</option>
+                                </select>
+                            </FormField>
                             <FormField label="Source Account" tooltip="Debit"><select name="sourceAccountId"><option value="">None</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FormField>
                             <FormField label="Destination Account" tooltip="Credit"><select name="destinationAccountId"><option value="">None</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FormField>
                             <button type="submit" className="btn-primary">Commit Transaction</button>
@@ -660,15 +689,61 @@ function ConsoleDashboard() {
                     </div>
                     <div className="data-table-panel">
                         <h4>🕒 Recent History</h4>
+                        <div style={{display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:'16px', marginBottom:'16px'}}>
+                            <div>
+                                <div style={{fontSize:'14px', fontWeight:'700'}}>Category view</div>
+                                <div style={{fontSize:'12px', color:'#64748b'}}>
+                                    {txCategoryFilter === 'ALL' ? 'Showing all transactions' : `Filtered by ${txCategoryFilter.replace(/_/g, ' ')}`}
+                                </div>
+                            </div>
+                            <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+                                <label style={{fontSize:'13px', fontWeight:'600', color:'#475569'}}>Category:</label>
+                                <select value={txCategoryFilter} onChange={e => setTxCategoryFilter(e.target.value)} style={{padding:'8px 10px', borderRadius:'8px', border:'1px solid #cbd5e1'}}>
+                                    <option value="ALL">All</option>
+                                    <option value="UNCATEGORIZED">Uncategorized</option>
+                                    <option value="FOOD">Food</option>
+                                    <option value="BILLS">Bills</option>
+                                    <option value="TRANSPORT">Transport</option>
+                                    <option value="HEALTH">Health</option>
+                                    <option value="ENTERTAINMENT">Entertainment</option>
+                                    <option value="RENT">Rent</option>
+                                    <option value="SHOPPING">Shopping</option>
+                                    <option value="GROCERIES">Groceries</option>
+                                    <option value="UTILITIES">Utilities</option>
+                                    <option value="HOUSEHOLD_EXPENSE">Household Expense</option>
+                                    <option value="LOAN_EMI">Loan EMI</option>
+                                    <option value="INVESTMENT_SIP">Investment SIP</option>
+                                    <option value="TAX_PAYMENT">Tax Payment</option>
+                                    <option value="SUBSCRIPTION">Subscription</option>
+                                    <option value="GUARANTEED_RETURN">Guaranteed Return</option>
+                                    <option value="ULIP">ULIP</option>
+                                    <option value="HEALTH_INSURANCE">Health Insurance</option>
+                                    <option value="LIFE_INSURANCE">Life Insurance</option>
+                                    <option value="VEHICLE_INSURANCE">Vehicle Insurance</option>
+                                    <option value="OTHER">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:'12px', marginBottom:'18px'}}>
+                            <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                                <div style={{fontSize:'12px', color:'#64748b', marginBottom:'6px'}}>Transactions</div>
+                                <div style={{fontSize:'22px', fontWeight:'800'}}>{filteredTransactions.length}</div>
+                            </div>
+                            <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                                <div style={{fontSize:'12px', color:'#64748b', marginBottom:'6px'}}>Total Value</div>
+                                <div style={{fontSize:'22px', fontWeight:'800'}}>₹{(transactionCategorySummary[txCategoryFilter]?.total || 0).toLocaleString('en-IN')}</div>
+                            </div>
+                        </div>
                         <table className="crud-table">
-                            <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Action</th></tr></thead>
+                            <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Category</th><th>Action</th></tr></thead>
                             <tbody>
-                                {transactions.map(tx => (
+                                {filteredTransactions.map(tx => (
                                     <tr key={tx.id}>
                                         <td>{tx.transactionDate}</td>
                                         <td>{tx.description}</td>
                                         <td style={{fontWeight:'700'}}>₹{tx.amount?.toLocaleString('en-IN')}</td>
                                         <td><span className="category-badge">{tx.type}</span></td>
+                                        <td><span className="category-badge" style={{background:'#eef2ff', color:'#3730a3'}}>{tx.category || 'UNCATEGORIZED'}</span></td>
                                         <td>
                                             <button className="action-btn delete" onClick={() => {
                                                 if (window.confirm('Rollback this transaction and reverse the balances?')) {
@@ -840,108 +915,6 @@ function ConsoleDashboard() {
     );
 }
 
-export default function App() { return <FinanceProvider><ConsoleDashboard /></FinanceProvider>; }
-
-function PortfolioCard({ portfolio, saveHolding, fetchHoldings, getLatestPrice, removeHolding }) {
-    const [holdings, setHoldings] = React.useState([]);
-    const [marketValues, setMarketValues] = React.useState({ total: 0 });
-    const [uploadProgress, setUploadProgress] = React.useState(0);
-    const { uploadMarketPricesFile, deletePortfolio } = useFinance();
-
-    React.useEffect(() => {
-        const load = async () => {
-            const h = await fetchHoldings(portfolio.id);
-            setHoldings(h || []);
-            const detailed = await Promise.all((h || []).map(async (item) => {
-                try {
-                    const mp = await getLatestPrice(item.symbol, item.exchange || '');
-                    const price = mp ? Number(mp.price || mp) : (item.avgPrice || 0);
-                    return { ...item, latestPrice: price, value: Number(item.quantity || 0) * price };
-                } catch (e) { return { ...item, latestPrice: item.avgPrice || 0, value: Number(item.quantity || 0) * (item.avgPrice || 0) }; }
-            }));
-            let total = detailed.reduce((s, it) => s + (it.value || 0), 0);
-            setHoldings(detailed);
-            setMarketValues({ total });
-        };
-        load();
-    }, [portfolio.id, fetchHoldings, getLatestPrice]);
-
-    return (
-        <div style={{border:'1px solid #e2e8f0', borderRadius:8, padding:12, marginBottom:12}}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div><strong>{portfolio.name}</strong> <div style={{fontSize:12,color:'#64748b'}}>{portfolio.currency}</div></div>
-                <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:12, color:'#64748b'}}>Portfolio Value</div>
-                    <div style={{fontWeight:700}}>₹{Math.round(marketValues.total).toLocaleString('en-IN')}</div>
-                </div>
-                <div style={{marginLeft:12}}>
-                    <button className="action-btn delete" onClick={async () => {
-                        if (!confirm(`Delete portfolio '${portfolio.name}' and all its holdings?`)) return;
-                        try {
-                            await deletePortfolio(portfolio.id);
-                        } catch (err) {
-                            console.error('Delete portfolio failed', err);
-                            alert('Delete portfolio failed: ' + (err.message || err));
-                        }
-                    }}>Delete Portfolio</button>
-                </div>
-            </div>
-            <div style={{marginTop:10}}>
-                <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    const data = Object.fromEntries(new FormData(e.target));
-                    await saveHolding(portfolio.id, { userId: data.userId || null, symbol: data.symbol, exchange: data.exchange, quantity: parseFloat(data.quantity || '0'), avgPrice: parseFloat(data.avgPrice || '0'), acquiredDate: data.acquiredDate });
-                    e.target.reset();
-                    const h = await fetchHoldings(portfolio.id);
-                    setHoldings(h || []);
-                }} style={{display:'flex', gap:8, marginTop:8}}>
-                    <input name="symbol" placeholder="Symbol (RELIANCE)" required />
-                    <input name="exchange" placeholder="Exchange (NSE)" defaultValue="NSE" style={{width:80}} />
-                    <input name="quantity" placeholder="Qty" style={{width:80}} />
-                    <input name="avgPrice" placeholder="Avg" style={{width:100}} />
-                    <button className="btn-primary">Add</button>
-                </form>
-            </div>
-            <div style={{marginTop:12}}>
-                <div style={{marginTop:8, marginBottom:8}}>
-                    <input type="file" accept="text/csv" onChange={async (ev) => {
-                        const f = ev.target.files && ev.target.files[0];
-                        if (!f) return;
-                        try {
-                            setUploadProgress(0);
-                            await uploadMarketPricesFile(f, percent => setUploadProgress(percent));
-                            setUploadProgress(100);
-                        } catch (err) {
-                            console.error('Upload failed', err);
-                        }
-                    }} />
-                    {uploadProgress > 0 && <div style={{marginTop:6}}>Upload: {uploadProgress}%</div>}
-                </div>
-                <table className="crud-table">
-                    <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Price</th><th>Value</th><th>Actions</th></tr></thead>
-                    <tbody>
-                        {holdings.map(h => (
-                            <tr key={h.id}>
-                                <td>{h.symbol}</td>
-                                <td>{h.quantity}</td>
-                                <td>₹{Number(h.avgPrice || 0).toLocaleString('en-IN')}</td>
-                                <td>₹{Number(h.latestPrice || 0).toLocaleString('en-IN')}</td>
-                                <td style={{fontWeight:700}}>₹{Math.round(h.value || ((h.quantity || 0) * (h.latestPrice || h.avgPrice || 0))).toLocaleString('en-IN')}</td>
-                                <td><button className="action-btn delete" onClick={async () => {
-                                    try {
-                                        await removeHolding(h.id);
-                                        const nh = await fetchHoldings(portfolio.id);
-                                        setHoldings(nh || []);
-                                    } catch (err) {
-                                        console.error('Delete holding failed', err);
-                                        alert('Delete failed: ' + (err.message || err));
-                                    }
-                                }}>Drop</button></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+export default function App() {
+    return <FinanceProvider><ConsoleDashboard /></FinanceProvider>;
 }

@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import com.finance.tracker.domain.Transaction.ExpenseCategory;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -36,9 +37,6 @@ public class FinanceController {
     @Autowired private IncomeSourceRepository incomeRepository;
     @Autowired private TransactionRepository transactionRepository;
     @Autowired private UserRepository userRepository;
-    @Autowired private HoldingRepository holdingRepository;
-    @Autowired private PortfolioRepository portfolioRepository;
-    @Autowired private com.finance.tracker.service.MarketDataService marketDataService;
     @Autowired private DataExportImportService dataService;
     @Autowired private ProjectionService projectionService;
     @Autowired private ReportingService reportingService;
@@ -55,6 +53,7 @@ public class FinanceController {
         List<FinancialAccount> accounts = accountRepository.findByUserId(userId);
         List<IncomeSource> incomes = incomeRepository.findByUserId(userId);
         List<RecurringObligation> obligations = obligationRepository.findByUserId(userId);
+        List<Transaction> transactions = transactionRepository.findByUserIdOrderByTransactionDateDesc(userId);
 
         BigDecimal totalAssets = BigDecimal.ZERO;
         BigDecimal totalLiabilities = BigDecimal.ZERO;
@@ -114,6 +113,20 @@ public class FinanceController {
         metrics.put("annualizedOutflow", annualizedOutflow);
         metrics.put("annualizedSurplus", annualizedSurplus);
         metrics.put("savingsRate", savingsRate);
+
+        YearMonth currentMonth = YearMonth.now();
+        BigDecimal monthlyExpenseTotal = BigDecimal.ZERO;
+        Map<String, BigDecimal> monthlyExpenseByCategory = new HashMap<>();
+        for (Transaction tx : transactions) {
+            if (tx.getTransactionDate() != null && YearMonth.from(tx.getTransactionDate()).equals(currentMonth) && isExpenseTransaction(tx.getType())) {
+                BigDecimal amount = tx.getAmount() != null ? tx.getAmount() : BigDecimal.ZERO;
+                monthlyExpenseTotal = monthlyExpenseTotal.add(amount);
+                String categoryKey = tx.getCategory() != null ? tx.getCategory().name() : "UNCATEGORIZED";
+                monthlyExpenseByCategory.put(categoryKey, monthlyExpenseByCategory.getOrDefault(categoryKey, BigDecimal.ZERO).add(amount));
+            }
+        }
+        metrics.put("monthlyExpenseTotal", monthlyExpenseTotal);
+        metrics.put("monthlyExpenseByCategory", monthlyExpenseByCategory);
         metrics.put("totalDeathBenefit", totalDeathBenefit);
         
         metrics.put("cashFlowForecast", projectionService.getForecast(1, userId));
@@ -140,6 +153,32 @@ public class FinanceController {
             case QUARTERLY: return amount.divide(BigDecimal.valueOf(3), 2, RoundingMode.HALF_UP);
             case YEARLY: return amount.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
             default: return BigDecimal.ZERO;
+        }
+    }
+
+    private boolean isExpenseTransaction(Transaction.TransactionType type) {
+        return type == Transaction.TransactionType.EXPENSE
+                || type == Transaction.TransactionType.LOAN_REPAYMENT
+                || type == Transaction.TransactionType.INSURANCE_PREMIUM
+                || type == Transaction.TransactionType.INVESTMENT;
+    }
+
+    private ExpenseCategory mapObligationExpenseCategory(RecurringObligation obl) {
+        if (obl.getCategory() == null) {
+            return ExpenseCategory.OTHER;
+        }
+        switch (obl.getCategory()) {
+            case INVESTMENT_SIP: return ExpenseCategory.INVESTMENT_SIP;
+            case LOAN_EMI: return ExpenseCategory.LOAN_EMI;
+            case TAX_PAYMENT: return ExpenseCategory.TAX_PAYMENT;
+            case SUBSCRIPTION: return ExpenseCategory.SUBSCRIPTION;
+            case HEALTH_INSURANCE: return ExpenseCategory.HEALTH_INSURANCE;
+            case LIFE_INSURANCE: return ExpenseCategory.LIFE_INSURANCE;
+            case VEHICLE_INSURANCE: return ExpenseCategory.VEHICLE_INSURANCE;
+            case HOUSEHOLD_EXPENSE: return ExpenseCategory.HOUSEHOLD_EXPENSE;
+            case GUARANTEED_RETURN: return ExpenseCategory.GUARANTEED_RETURN;
+            case ULIP: return ExpenseCategory.ULIP;
+            default: return ExpenseCategory.OTHER;
         }
     }
 
@@ -222,54 +261,10 @@ public class FinanceController {
             tx.setObligationId(id);
             tx.setDescription("Payment for " + obl.getInstrumentName());
             tx.setType(mapCategoryToTxType(obl.getCategory()));
+            tx.setCategory(mapObligationExpenseCategory(obl));
             updateAccountBalance(linkedAccount, obl.getAmount().negate());
             obl.setNextDueDate(calculateNextDate(obl.getNextDueDate(), obl.getFrequency()));
             obligationRepository.save(obl);
-            // If this obligation is an investment SIP, record/update holding in default portfolio
-            try {
-                if (obl.getCategory() == RecurringObligation.ObligationCategory.INVESTMENT_SIP) {
-                    String raw = (obl.getReferenceNo() != null && !obl.getReferenceNo().isBlank()) ? obl.getReferenceNo() : obl.getInstrumentName();
-                    String symbol = normalizeSymbol(raw);
-                    Long uid = getCurrentUserId();
-                    // find or create default portfolio for user
-                    Portfolio portfolio = portfolioRepository.findByUserId(uid).stream().findFirst().orElseGet(() -> {
-                        Portfolio p = new Portfolio(); p.setUserId(uid); p.setName("Default Portfolio"); return portfolioRepository.save(p);
-                    });
-                    java.util.Optional<Holding> existing = holdingRepository.findByPortfolioIdAndSymbol(portfolio.getId(), symbol);
-                    java.math.BigDecimal price = marketDataService.getLatestPrice(symbol, "MF").orElse(java.math.BigDecimal.ZERO);
-                    java.math.BigDecimal qty = java.math.BigDecimal.ZERO;
-                    if (price.compareTo(java.math.BigDecimal.ZERO) > 0) {
-                        qty = obl.getAmount().divide(price, 8, RoundingMode.HALF_UP);
-                    }
-                    if (existing.isPresent()) {
-                        Holding h = existing.get();
-                        java.math.BigDecimal existingQty = h.getQuantity() != null ? h.getQuantity() : java.math.BigDecimal.ZERO;
-                        java.math.BigDecimal existingAvg = h.getAvgPrice() != null ? h.getAvgPrice() : java.math.BigDecimal.ZERO;
-                        if (qty.compareTo(java.math.BigDecimal.ZERO) > 0) {
-                            java.math.BigDecimal totalCost = existingAvg.multiply(existingQty).add(obl.getAmount());
-                            java.math.BigDecimal newQty = existingQty.add(qty);
-                            java.math.BigDecimal newAvg = newQty.compareTo(java.math.BigDecimal.ZERO) > 0 ? totalCost.divide(newQty, 8, RoundingMode.HALF_UP) : existingAvg;
-                            h.setQuantity(newQty);
-                            h.setAvgPrice(newAvg);
-                        } else {
-                            // price unavailable: increment a notional cost by adding to avgPrice weighted by cost
-                            // keep quantity unchanged
-                            h.setAvgPrice(existingAvg.add(obl.getAmount()));
-                        }
-                        holdingRepository.save(h);
-                    } else {
-                        Holding h = new Holding();
-                        h.setUserId(uid);
-                        h.setPortfolio(portfolio);
-                        h.setSymbol(symbol);
-                        h.setExchange("MF");
-                        h.setAcquiredDate(LocalDate.now());
-                        h.setQuantity(qty);
-                        h.setAvgPrice(qty.compareTo(java.math.BigDecimal.ZERO) > 0 ? obl.getAmount().divide(qty, 8, RoundingMode.HALF_UP) : obl.getAmount());
-                        holdingRepository.save(h);
-                    }
-                }
-            } catch (Exception ignored) {}
         }
         transactionRepository.save(tx);
         return ResponseEntity.ok(tx);
@@ -314,6 +309,9 @@ public class FinanceController {
         tx.setAmount(new BigDecimal(request.get("amount").toString()));
         tx.setDescription((String)request.get("description"));
         tx.setType(Transaction.TransactionType.valueOf((String)request.get("type")));
+        if (request.get("category") != null && !request.get("category").toString().isBlank()) {
+            tx.setCategory(Transaction.ExpenseCategory.valueOf(request.get("category").toString()));
+        }
 
         if (request.get("sourceAccountId") != null && !request.get("sourceAccountId").toString().isEmpty()) {
             FinancialAccount src = accountRepository.findById(Long.valueOf(request.get("sourceAccountId").toString())).orElseThrow();
