@@ -148,11 +148,15 @@ export function FinanceProvider({ children }) {
     };
 
     const recordEvent = async (id, type) => {
-        await fetch('http://localhost:8080/api/finance/transactions/record-event', {
+        const res = await fetch('http://localhost:8080/api/finance/transactions/record-event', {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, type })
         });
+        if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(errorText || 'Failed to record payment event');
+        }
         await fetchCoreTelemetry();
     };
 
@@ -162,6 +166,18 @@ export function FinanceProvider({ children }) {
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(tx)
         });
+        await fetchCoreTelemetry();
+    };
+
+    const removeTransaction = async (id) => {
+        const res = await fetch(`http://localhost:8080/api/finance/transactions/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || 'Failed to rollback transaction');
+        }
         await fetchCoreTelemetry();
     };
 
@@ -242,7 +258,7 @@ export function FinanceProvider({ children }) {
         <FinanceContext.Provider value={{
             metrics, accounts, incomes, obligations, transactions, alerts, loading, user, portfolios,
             login, register, logout, saveAccount, removeAccount, saveIncome, removeIncome,
-            saveObligation, removeObligation, recordEvent, saveManualTransaction,
+            saveObligation, removeObligation, recordEvent, saveManualTransaction, removeTransaction,
             savePortfolio, saveHolding, removeHolding, deletePortfolio,
             fetchHoldings, getLatestPrice, uploadMarketPricesFile,
             fetchCoreTelemetry, getAuthHeaders

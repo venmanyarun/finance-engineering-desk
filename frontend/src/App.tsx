@@ -65,7 +65,7 @@ function ConsoleDashboard() {
     const { 
         metrics, accounts, incomes, obligations, transactions, alerts, loading, user, logout, 
         saveAccount, removeAccount, saveIncome, removeIncome, saveObligation, removeObligation, 
-        recordEvent, saveManualTransaction, getAuthHeaders, savePortfolio, saveHolding, fetchHoldings, getLatestPrice, removeHolding, portfolios 
+        recordEvent, saveManualTransaction, removeTransaction, getAuthHeaders, savePortfolio, saveHolding, fetchHoldings, getLatestPrice, removeHolding, portfolios 
     } = useFinance();
 
     const [activeTab, setActiveTab] = useState('DASHBOARD');
@@ -661,7 +661,7 @@ function ConsoleDashboard() {
                     <div className="data-table-panel">
                         <h4>🕒 Recent History</h4>
                         <table className="crud-table">
-                            <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th></tr></thead>
+                            <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Action</th></tr></thead>
                             <tbody>
                                 {transactions.map(tx => (
                                     <tr key={tx.id}>
@@ -669,6 +669,13 @@ function ConsoleDashboard() {
                                         <td>{tx.description}</td>
                                         <td style={{fontWeight:'700'}}>₹{tx.amount?.toLocaleString('en-IN')}</td>
                                         <td><span className="category-badge">{tx.type}</span></td>
+                                        <td>
+                                            <button className="action-btn delete" onClick={() => {
+                                                if (window.confirm('Rollback this transaction and reverse the balances?')) {
+                                                    removeTransaction(tx.id);
+                                                }
+                                            }}>Rollback</button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

@@ -143,6 +143,7 @@ public class FinanceController {
         }
     }
 
+    @Transactional(readOnly = true)
     @GetMapping("/active-alerts")
     public List<Map<String, Object>> getActiveAlerts(@RequestParam(defaultValue = "30") int lookaheadDays) {
         Long userId = getCurrentUserId();
@@ -213,11 +214,15 @@ public class FinanceController {
         } else if ("OBLIGATION".equals(type)) {
             RecurringObligation obl = obligationRepository.findById(id).orElseThrow();
             tx.setAmount(obl.getAmount());
-            tx.setSourceAccount(obl.getLinkedAccount());
+            FinancialAccount linkedAccount = null;
+            if (obl.getLinkedAccount() != null && obl.getLinkedAccount().getId() != null) {
+                linkedAccount = accountRepository.findById(obl.getLinkedAccount().getId()).orElse(null);
+            }
+            tx.setSourceAccount(linkedAccount != null ? linkedAccount : obl.getLinkedAccount());
             tx.setObligationId(id);
             tx.setDescription("Payment for " + obl.getInstrumentName());
             tx.setType(mapCategoryToTxType(obl.getCategory()));
-            updateAccountBalance(obl.getLinkedAccount(), obl.getAmount().negate());
+            updateAccountBalance(linkedAccount, obl.getAmount().negate());
             obl.setNextDueDate(calculateNextDate(obl.getNextDueDate(), obl.getFrequency()));
             obligationRepository.save(obl);
             // If this obligation is an investment SIP, record/update holding in default portfolio
@@ -270,6 +275,35 @@ public class FinanceController {
         return ResponseEntity.ok(tx);
     }
 
+    @DeleteMapping("/transactions/{id}")
+    @Transactional
+    public ResponseEntity<?> deleteTransaction(@PathVariable Long id) {
+        Transaction tx = transactionRepository.findById(id).orElseThrow();
+        if (!tx.getUserId().equals(getCurrentUserId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access denied");
+        }
+        if (tx.getSourceAccount() != null && tx.getSourceAccount().getId() != null) {
+            accountRepository.findById(tx.getSourceAccount().getId()).ifPresent(src -> updateAccountBalance(src, tx.getAmount()));
+        }
+        if (tx.getDestinationAccount() != null && tx.getDestinationAccount().getId() != null) {
+            accountRepository.findById(tx.getDestinationAccount().getId()).ifPresent(dest -> updateAccountBalance(dest, tx.getAmount().negate()));
+        }
+        if (tx.getObligationId() != null) {
+            obligationRepository.findById(tx.getObligationId()).ifPresent(obl -> {
+                obl.setNextDueDate(revertDate(obl.getNextDueDate(), obl.getFrequency()));
+                obligationRepository.save(obl);
+            });
+        }
+        if (tx.getIncomeSourceId() != null) {
+            incomeRepository.findById(tx.getIncomeSourceId()).ifPresent(inc -> {
+                inc.setNextExpectedDate(revertDate(inc.getNextExpectedDate(), inc.getFrequency()));
+                incomeRepository.save(inc);
+            });
+        }
+        transactionRepository.delete(tx);
+        return ResponseEntity.ok(Map.of("message", "Transaction rolled back"));
+    }
+
     @PostMapping("/transactions/manual")
     @Transactional
     public ResponseEntity<?> createManualTransaction(@RequestBody Map<String, Object> request) {
@@ -317,6 +351,16 @@ public class FinanceController {
             case MONTHLY: return current.plusMonths(1);
             case QUARTERLY: return current.plusMonths(3);
             case YEARLY: return current.plusYears(1);
+            default: return current;
+        }
+    }
+
+    private LocalDate revertDate(LocalDate current, RecurringObligation.PaymentFrequency freq) {
+        if (current == null) return null;
+        switch (freq) {
+            case MONTHLY: return current.minusMonths(1);
+            case QUARTERLY: return current.minusMonths(3);
+            case YEARLY: return current.minusYears(1);
             default: return current;
         }
     }

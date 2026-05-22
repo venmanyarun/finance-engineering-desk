@@ -36,19 +36,23 @@ An enterprise-grade financial command terminal for high-precision asset tracking
 
 ---
 
-## 🚀 One-Command Deployment
-
-The project includes a unified deployment script for Windows environments.
+## 🚀 Local Startup
 
 ### Prerequisites
 - **JDK 17** and **Node.js 18+** installed in PATH.
 
-### Installation
-Run the following command from the project root:
+### Backend
 ```powershell
-./deploy.bat
+cd E:\Repos\finance-engineering-desk
+mvn spring-boot:run
 ```
-This script will build the backend, install frontend dependencies, and launch both the API and the Dashboard simultaneously.
+
+### Frontend
+```powershell
+cd E:\Repos\finance-engineering-desk\frontend
+npm install
+npm run dev
+```
 
 ---
 
