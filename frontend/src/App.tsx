@@ -61,6 +61,59 @@ function AuthForms() {
     );
 }
 
+function ManualTransactionForm({ accounts, todayStr, saveManualTransaction }) {
+    return (
+        <div className="form-panel">
+            <h3>➕ Manual Transaction</h3>
+            <form onSubmit={async (e) => {
+                e.preventDefault();
+                const data = Object.fromEntries(new FormData(e.target));
+                await saveManualTransaction(data);
+                e.target.reset();
+            }}>
+                <FormField label="Date" tooltip="Timestamp"><input type="date" name="date" required defaultValue={todayStr} /></FormField>
+                <FormField label="Amount" tooltip="Value"><input type="number" step="0.01" name="amount" required min="0.01" /></FormField>
+                <FormField label="Description" tooltip="Purpose"><input type="text" name="description" required /></FormField>
+                <FormField label="Type" tooltip="Classification">
+                    <select name="type">
+                        <option value="EXPENSE">Expense</option>
+                        <option value="INCOME">Income</option>
+                        <option value="TRANSFER">Transfer</option>
+                    </select>
+                </FormField>
+                <FormField label="Expense Category" tooltip="Optional classification for spend tracking">
+                    <select name="category">
+                        <option value="">Uncategorized</option>
+                        <option value="FOOD">Food</option>
+                        <option value="BILLS">Bills</option>
+                        <option value="TRANSPORT">Transport</option>
+                        <option value="HEALTH">Health</option>
+                        <option value="ENTERTAINMENT">Entertainment</option>
+                        <option value="RENT">Rent</option>
+                        <option value="SHOPPING">Shopping</option>
+                        <option value="GROCERIES">Groceries</option>
+                        <option value="UTILITIES">Utilities</option>
+                        <option value="HOUSEHOLD_EXPENSE">Household Expense</option>
+                        <option value="LOAN_EMI">Loan EMI</option>
+                        <option value="INVESTMENT_SIP">Investment SIP</option>
+                        <option value="TAX_PAYMENT">Tax Payment</option>
+                        <option value="SUBSCRIPTION">Subscription</option>
+                        <option value="GUARANTEED_RETURN">Guaranteed Return</option>
+                        <option value="ULIP">ULIP</option>
+                        <option value="HEALTH_INSURANCE">Health Insurance</option>
+                        <option value="LIFE_INSURANCE">Life Insurance</option>
+                        <option value="VEHICLE_INSURANCE">Vehicle Insurance</option>
+                        <option value="OTHER">Other</option>
+                    </select>
+                </FormField>
+                <FormField label="Source Account" tooltip="Debit"><select name="sourceAccountId"><option value="">None</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FormField>
+                <FormField label="Destination Account" tooltip="Credit"><select name="destinationAccountId"><option value="">None</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FormField>
+                <button type="submit" className="btn-primary">Commit Transaction</button>
+            </form>
+        </div>
+    );
+}
+
 function ConsoleDashboard() {
     const { 
         metrics, accounts, incomes, obligations, transactions, alerts, loading, user, logout, 
@@ -621,141 +674,104 @@ function ConsoleDashboard() {
 
             {activeTab === 'TRANSACTIONS' && (
                 <div className="crud-container">
-                    <div className="metric-display-panel" style={{marginBottom:'20px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px'}}>
-                        <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
-                            <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Current Month Spend</div>
-                            <div style={{fontSize:'28px', fontWeight:'800'}}>₹{metrics.monthlyExpenseTotal?.toLocaleString('en-IN') || '0'}</div>
-                        </div>
-                        <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
-                            <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Top Expense Categories</div>
-                            <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
-                                {Object.entries(metrics.monthlyExpenseByCategory || {}).sort((a,b) => Number(b[1]) - Number(a[1])).slice(0,4).map(([key, value]) => (
-                                    <div key={key} style={{display:'flex', justifyContent:'space-between', fontSize:'12px'}}>
-                                        <span>{key.replace(/_/g, ' ')}</span>
-                                        <strong>₹{Number(value).toLocaleString('en-IN')}</strong>
+                    {renderSubTabs()}
+                    {subTab === 'ADD' ? (
+                        <ManualTransactionForm
+                            accounts={accounts}
+                            todayStr={todayStr}
+                            saveManualTransaction={saveManualTransaction}
+                        />
+                    ) : (
+                        <>
+                            <div className="metric-display-panel" style={{marginBottom:'20px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px'}}>
+                                <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                                    <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Current Month Spend</div>
+                                    <div style={{fontSize:'28px', fontWeight:'800'}}>₹{metrics.monthlyExpenseTotal?.toLocaleString('en-IN') || '0'}</div>
+                                </div>
+                                <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                                    <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Top Expense Categories</div>
+                                    <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+                                        {Object.entries(metrics.monthlyExpenseByCategory || {}).sort((a,b) => Number(b[1]) - Number(a[1])).slice(0,4).map(([key, value]) => (
+                                            <div key={key} style={{display:'flex', justifyContent:'space-between', fontSize:'12px'}}>
+                                                <span>{key.replace(/_/g, ' ')}</span>
+                                                <strong>₹{Number(value).toLocaleString('en-IN')}</strong>
+                                            </div>
+                                        ))}
+                                        {Object.keys(metrics.monthlyExpenseByCategory || {}).length === 0 && <div style={{fontSize:'12px', color:'#94a3b8'}}>No categorized spend recorded yet.</div>}
                                     </div>
-                                ))}
-                                {Object.keys(metrics.monthlyExpenseByCategory || {}).length === 0 && <div style={{fontSize:'12px', color:'#94a3b8'}}>No categorized spend recorded yet.</div>}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="form-panel">
-                        <h3>➕ Manual Transaction</h3>
-                        <form onSubmit={async (e) => {
-                            e.preventDefault();
-                            const data = Object.fromEntries(new FormData(e.target));
-                            await saveManualTransaction(data);
-                            e.target.reset();
-                        }}>
-                            <FormField label="Date" tooltip="Timestamp"><input type="date" name="date" required defaultValue={todayStr} /></FormField>
-                            <FormField label="Amount" tooltip="Value"><input type="number" step="0.01" name="amount" required min="0.01" /></FormField>
-                            <FormField label="Description" tooltip="Purpose"><input type="text" name="description" required /></FormField>
-                            <FormField label="Type" tooltip="Classification">
-                                <select name="type">
-                                    <option value="EXPENSE">Expense</option>
-                                    <option value="INCOME">Income</option>
-                                    <option value="TRANSFER">Transfer</option>
-                                </select>
-                            </FormField>
-                            <FormField label="Expense Category" tooltip="Optional classification for spend tracking">
-                                <select name="category">
-                                    <option value="">Uncategorized</option>
-                                    <option value="FOOD">Food</option>
-                                    <option value="BILLS">Bills</option>
-                                    <option value="TRANSPORT">Transport</option>
-                                    <option value="HEALTH">Health</option>
-                                    <option value="ENTERTAINMENT">Entertainment</option>
-                                    <option value="RENT">Rent</option>
-                                    <option value="SHOPPING">Shopping</option>
-                                    <option value="GROCERIES">Groceries</option>
-                                    <option value="UTILITIES">Utilities</option>
-                                    <option value="HOUSEHOLD_EXPENSE">Household Expense</option>
-                                    <option value="LOAN_EMI">Loan EMI</option>
-                                    <option value="INVESTMENT_SIP">Investment SIP</option>
-                                    <option value="TAX_PAYMENT">Tax Payment</option>
-                                    <option value="SUBSCRIPTION">Subscription</option>
-                                    <option value="GUARANTEED_RETURN">Guaranteed Return</option>
-                                    <option value="ULIP">ULIP</option>
-                                    <option value="HEALTH_INSURANCE">Health Insurance</option>
-                                    <option value="LIFE_INSURANCE">Life Insurance</option>
-                                    <option value="VEHICLE_INSURANCE">Vehicle Insurance</option>
-                                    <option value="OTHER">Other</option>
-                                </select>
-                            </FormField>
-                            <FormField label="Source Account" tooltip="Debit"><select name="sourceAccountId"><option value="">None</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FormField>
-                            <FormField label="Destination Account" tooltip="Credit"><select name="destinationAccountId"><option value="">None</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></FormField>
-                            <button type="submit" className="btn-primary">Commit Transaction</button>
-                        </form>
-                    </div>
-                    <div className="data-table-panel">
-                        <h4>🕒 Recent History</h4>
-                        <div style={{display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:'16px', marginBottom:'16px'}}>
-                            <div>
-                                <div style={{fontSize:'14px', fontWeight:'700'}}>Category view</div>
-                                <div style={{fontSize:'12px', color:'#64748b'}}>
-                                    {txCategoryFilter === 'ALL' ? 'Showing all transactions' : `Filtered by ${txCategoryFilter.replace(/_/g, ' ')}`}
                                 </div>
                             </div>
-                            <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
-                                <label style={{fontSize:'13px', fontWeight:'600', color:'#475569'}}>Category:</label>
-                                <select value={txCategoryFilter} onChange={e => setTxCategoryFilter(e.target.value)} style={{padding:'8px 10px', borderRadius:'8px', border:'1px solid #cbd5e1'}}>
-                                    <option value="ALL">All</option>
-                                    <option value="UNCATEGORIZED">Uncategorized</option>
-                                    <option value="FOOD">Food</option>
-                                    <option value="BILLS">Bills</option>
-                                    <option value="TRANSPORT">Transport</option>
-                                    <option value="HEALTH">Health</option>
-                                    <option value="ENTERTAINMENT">Entertainment</option>
-                                    <option value="RENT">Rent</option>
-                                    <option value="SHOPPING">Shopping</option>
-                                    <option value="GROCERIES">Groceries</option>
-                                    <option value="UTILITIES">Utilities</option>
-                                    <option value="HOUSEHOLD_EXPENSE">Household Expense</option>
-                                    <option value="LOAN_EMI">Loan EMI</option>
-                                    <option value="INVESTMENT_SIP">Investment SIP</option>
-                                    <option value="TAX_PAYMENT">Tax Payment</option>
-                                    <option value="SUBSCRIPTION">Subscription</option>
-                                    <option value="GUARANTEED_RETURN">Guaranteed Return</option>
-                                    <option value="ULIP">ULIP</option>
-                                    <option value="HEALTH_INSURANCE">Health Insurance</option>
-                                    <option value="LIFE_INSURANCE">Life Insurance</option>
-                                    <option value="VEHICLE_INSURANCE">Vehicle Insurance</option>
-                                    <option value="OTHER">Other</option>
-                                </select>
+                            <div className="data-table-panel">
+                                <h4>🕒 Recent History</h4>
+                                <div style={{display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:'16px', marginBottom:'16px'}}>
+                                    <div>
+                                        <div style={{fontSize:'14px', fontWeight:'700'}}>Category view</div>
+                                        <div style={{fontSize:'12px', color:'#64748b'}}>
+                                            {txCategoryFilter === 'ALL' ? 'Showing all transactions' : `Filtered by ${txCategoryFilter.replace(/_/g, ' ')}`}
+                                        </div>
+                                    </div>
+                                    <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+                                        <label style={{fontSize:'13px', fontWeight:'600', color:'#475569'}}>Category:</label>
+                                        <select value={txCategoryFilter} onChange={e => setTxCategoryFilter(e.target.value)} style={{padding:'8px 10px', borderRadius:'8px', border:'1px solid #cbd5e1'}}>
+                                            <option value="ALL">All</option>
+                                            <option value="UNCATEGORIZED">Uncategorized</option>
+                                            <option value="FOOD">Food</option>
+                                            <option value="BILLS">Bills</option>
+                                            <option value="TRANSPORT">Transport</option>
+                                            <option value="HEALTH">Health</option>
+                                            <option value="ENTERTAINMENT">Entertainment</option>
+                                            <option value="RENT">Rent</option>
+                                            <option value="SHOPPING">Shopping</option>
+                                            <option value="GROCERIES">Groceries</option>
+                                            <option value="UTILITIES">Utilities</option>
+                                            <option value="HOUSEHOLD_EXPENSE">Household Expense</option>
+                                            <option value="LOAN_EMI">Loan EMI</option>
+                                            <option value="INVESTMENT_SIP">Investment SIP</option>
+                                            <option value="TAX_PAYMENT">Tax Payment</option>
+                                            <option value="SUBSCRIPTION">Subscription</option>
+                                            <option value="GUARANTEED_RETURN">Guaranteed Return</option>
+                                            <option value="ULIP">ULIP</option>
+                                            <option value="HEALTH_INSURANCE">Health Insurance</option>
+                                            <option value="LIFE_INSURANCE">Life Insurance</option>
+                                            <option value="VEHICLE_INSURANCE">Vehicle Insurance</option>
+                                            <option value="OTHER">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:'12px', marginBottom:'18px'}}>
+                                    <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                                        <div style={{fontSize:'12px', color:'#64748b', marginBottom:'6px'}}>Transactions</div>
+                                        <div style={{fontSize:'22px', fontWeight:'800'}}>{filteredTransactions.length}</div>
+                                    </div>
+                                    <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                                        <div style={{fontSize:'12px', color:'#64748b', marginBottom:'6px'}}>Total Value</div>
+                                        <div style={{fontSize:'22px', fontWeight:'800'}}>₹{(transactionCategorySummary[txCategoryFilter]?.total || 0).toLocaleString('en-IN')}</div>
+                                    </div>
+                                </div>
+                                <table className="crud-table">
+                                    <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Category</th><th>Action</th></tr></thead>
+                                    <tbody>
+                                        {filteredTransactions.map(tx => (
+                                            <tr key={tx.id}>
+                                                <td>{tx.transactionDate}</td>
+                                                <td>{tx.description}</td>
+                                                <td style={{fontWeight:'700'}}>₹{tx.amount?.toLocaleString('en-IN')}</td>
+                                                <td><span className="category-badge">{tx.type}</span></td>
+                                                <td><span className="category-badge" style={{background:'#eef2ff', color:'#3730a3'}}>{tx.category || 'UNCATEGORIZED'}</span></td>
+                                                <td>
+                                                    <button className="action-btn delete" onClick={() => {
+                                                        if (window.confirm('Rollback this transaction and reverse the balances?')) {
+                                                            removeTransaction(tx.id);
+                                                        }
+                                                    }}>Rollback</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
-                        </div>
-                        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:'12px', marginBottom:'18px'}}>
-                            <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
-                                <div style={{fontSize:'12px', color:'#64748b', marginBottom:'6px'}}>Transactions</div>
-                                <div style={{fontSize:'22px', fontWeight:'800'}}>{filteredTransactions.length}</div>
-                            </div>
-                            <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
-                                <div style={{fontSize:'12px', color:'#64748b', marginBottom:'6px'}}>Total Value</div>
-                                <div style={{fontSize:'22px', fontWeight:'800'}}>₹{(transactionCategorySummary[txCategoryFilter]?.total || 0).toLocaleString('en-IN')}</div>
-                            </div>
-                        </div>
-                        <table className="crud-table">
-                            <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Category</th><th>Action</th></tr></thead>
-                            <tbody>
-                                {filteredTransactions.map(tx => (
-                                    <tr key={tx.id}>
-                                        <td>{tx.transactionDate}</td>
-                                        <td>{tx.description}</td>
-                                        <td style={{fontWeight:'700'}}>₹{tx.amount?.toLocaleString('en-IN')}</td>
-                                        <td><span className="category-badge">{tx.type}</span></td>
-                                        <td><span className="category-badge" style={{background:'#eef2ff', color:'#3730a3'}}>{tx.category || 'UNCATEGORIZED'}</span></td>
-                                        <td>
-                                            <button className="action-btn delete" onClick={() => {
-                                                if (window.confirm('Rollback this transaction and reverse the balances?')) {
-                                                    removeTransaction(tx.id);
-                                                }
-                                            }}>Rollback</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                        </>
+                    )}
                 </div>
             )}
 
