@@ -4,6 +4,8 @@ import com.finance.tracker.domain.*;
 import com.finance.tracker.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,6 +14,8 @@ import java.util.*;
 
 @Service
 public class ProjectionService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProjectionService.class);
 
     @Autowired
     private IncomeSourceRepository incomeRepository;
@@ -56,6 +60,7 @@ public class ProjectionService {
     }
 
     public RetirementProjection getRetirementProjection(YearMonth fromMonth, YearMonth toMonth, Long userId) {
+        log.info("getRetirementProjection called for userId: {}, fromMonth: {}, toMonth: {}", userId, fromMonth, toMonth);
         YearMonth startYm = fromMonth.compareTo(toMonth) <= 0 ? fromMonth : toMonth;
         YearMonth endYm = fromMonth.compareTo(toMonth) <= 0 ? toMonth : fromMonth;
         LocalDate windowStart = startYm.atDay(1);
@@ -87,9 +92,7 @@ public class ProjectionService {
 
             if (obligation.getMaturityIncomeAmount() != null && obligation.getMaturityIncomeAmount().compareTo(BigDecimal.ZERO) > 0 && obligation.getMaturityIncomeStartDate() != null) {
                 LocalDate current = obligation.getMaturityIncomeStartDate();
-                LocalDate maturityEnd = obligation.getMaturityIncomeDurationYears() != null
-                        ? obligation.getMaturityIncomeStartDate().plusYears(obligation.getMaturityIncomeDurationYears())
-                        : null;
+                LocalDate maturityEnd = obligation.getMaturityIncomeStartDate().plusYears(obligation.getMaturityIncomeDurationYears() != null ? obligation.getMaturityIncomeDurationYears() : 0);
                 while (!current.isAfter(windowEnd)) {
                     if (!current.isBefore(windowStart) && (maturityEnd == null || !current.isAfter(maturityEnd))) {
                         incomeTotal = incomeTotal.add(obligation.getMaturityIncomeAmount());
@@ -123,6 +126,7 @@ public class ProjectionService {
     }
 
     public List<CashFlowPoint> getForecast(int years, Long userId) {
+        log.info("getForecast called for userId: {}, years: {}", userId, years);
         // We simulate with a 1-month buffer to handle boundaries, then return the next 12 full months.
         List<MonthlySnapshot> snapshots = getMonthlyProjection(years * 12 + 1, userId);
         List<CashFlowPoint> forecast = new ArrayList<>();
@@ -135,6 +139,7 @@ public class ProjectionService {
     }
 
     public List<MonthlySnapshot> getMonthlyProjection(int monthsAhead, Long userId) {
+        log.info("getMonthlyProjection called for userId: {}, monthsAhead: {}", userId, monthsAhead);
         Map<YearMonth, MonthlySnapshot> projectionMap = new LinkedHashMap<>();
         YearMonth startMonth = YearMonth.now();
 

@@ -6,6 +6,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -14,12 +16,15 @@ import java.util.List;
 @Service
 public class ReportingService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReportingService.class);
+
     @Autowired private FinancialAccountRepository accountRepository;
     @Autowired private IncomeSourceRepository incomeRepository;
     @Autowired private RecurringObligationRepository obligationRepository;
     @Autowired private TransactionRepository transactionRepository;
 
     public byte[] generateFinancialExcelReport(User user) throws IOException {
+        log.info("generateFinancialExcelReport called for user: {}", user.getId());
         Long userId = user.getId();
         try (Workbook workbook = new XSSFWorkbook()) {
             // 1. Accounts Sheet
