@@ -134,6 +134,17 @@ function ConsoleDashboard() {
 
     const todayStr = new Date().toISOString().split('T')[0];
 
+    // State for the account form's selected account type
+    const [accountFormAccountType, setAccountFormAccountType] = useState('SAVINGS_ACCOUNT');
+
+    useEffect(() => {
+        if (editingItem && activeTab === 'ACCOUNTS') {
+            setAccountFormAccountType(editingItem.accountType || 'SAVINGS_ACCOUNT');
+        } else if (activeTab === 'ACCOUNTS' && subTab === 'ADD') {
+            setAccountFormAccountType('SAVINGS_ACCOUNT'); // Reset for new account
+        }
+    }, [editingItem, activeTab, subTab]);
+
     useEffect(() => {
         if (activeTab === 'PROJECTIONS' || activeTab === 'RETIREMENT' || activeTab === 'DASHBOARD' || activeTab === 'INCOME' || activeTab === 'OBLIGATIONS') {
             const fetchForecast = async () => {
@@ -382,30 +393,39 @@ function ConsoleDashboard() {
                                 <FormField label="Registered Nominee" tooltip="Optional"><input type="text" name="nominee" defaultValue={editingItem?.nominee} /></FormField>
                                 <FormField label="Current Balance" tooltip="Present valuation"><input type="number" step="0.01" name="balance" defaultValue={editingItem?.balance} required /></FormField>
                                 <FormField label="Last Updated" tooltip="Date"><input type="date" name="balanceUpdatedDate" defaultValue={editingItem?.balanceUpdatedDate || todayStr} required /></FormField>
-                                <FormField label="Asset Class" tooltip="Broad classification">
-                                    <select name="assetClass" defaultValue={editingItem?.assetClass || 'CASH_EQUIVALENTS'}>
-                                        <option value="CASH_EQUIVALENTS">Cash Equivalents</option>
-                                        <option value="FIXED_INCOME">Fixed Income</option>
-                                        <option value="EQUITIES">Equities</option>
-                                        <option value="RETIREMENT">Retirement</option>
-                                        <option value="LIABILITIES">Liabilities</option>
+                                {/* Removed Asset Class direct selection as it's now derived from Account Type */}
+                                <FormField label="Account Type" tooltip="Specific product">
+                                    <select 
+                                        name="accountType" 
+                                        defaultValue={editingItem?.accountType || 'SAVINGS_ACCOUNT'}
+                                        onChange={(e) => setAccountFormAccountType(e.target.value)}
+                                    >
+                                        <option value="SAVINGS_ACCOUNT">Savings Account</option>
+                                        <option value="CURRENT_ACCOUNT">Current Account</option>
+                                        <option value="FIXED_DEPOSIT">Fixed Deposit</option>
+                                        <option value="RECURRING_DEPOSIT">Recurring Deposit</option>
+                                        <option value="MUTUAL_FUND">Mutual Fund</option>
+                                        <option value="EQUITY_STOCKS">Equity Stocks</option>
+                                        <option value="PROVIDENT_FUND">Provident Fund</option>
+                                        <option value="PUBLIC_PROVIDENT_FUND">Public Provident Fund</option>
+                                        <option value="NPS">NPS</option>
+                                        <option value="HOME_LOAN">Home Loan</option>
+                                        <option value="PERSONAL_LOAN">Personal Loan</option>
+                                        <option value="VEHICLE_LOAN">Vehicle Loan</option>
+                                        <option value="CREDIT_CARD">Credit Card</option>
+                                        <option value="CASH_WALLET">Cash/Wallet</option>
                                     </select>
                                 </FormField>
+                                {accountFormAccountType === 'CREDIT_CARD' && (
+                                    <FormField label="Credit Limit" tooltip="Maximum credit allowed">
+                                        <input type="number" step="0.01" name="creditLimit" defaultValue={editingItem?.creditLimit} />
+                                    </FormField>
+                                )}
                                 <FormField label="Retirement Asset" tooltip="Include this account in retirement projections">
                                     <label style={{display:'inline-flex', alignItems:'center', gap:'8px'}}>
                                         <input type="checkbox" name="retirementAsset" defaultChecked={editingItem?.retirementAsset || false} />
                                         Consider this a retirement account
                                     </label>
-                                </FormField>
-                                <FormField label="Account Type" tooltip="Specific product">
-                                    <select name="accountType" defaultValue={editingItem?.accountType || 'SAVINGS_ACCOUNT'}>
-                                        <option value="SAVINGS_ACCOUNT">Savings Account</option>
-                                        <option value="FIXED_DEPOSIT">Fixed Deposit</option>
-                                        <option value="MUTUAL_FUND">Mutual Fund</option>
-                                        <option value="HOME_LOAN">Home Loan</option>
-                                        <option value="CREDIT_CARD">Credit Card</option>
-                                        <option value="CASH_WALLET">Cash/Wallet</option>
-                                    </select>
                                 </FormField>
                                 <button type="submit" className="btn-primary">Commit Account</button>
                             </form>
@@ -413,7 +433,7 @@ function ConsoleDashboard() {
                     ) : (
                         <div className="data-table-panel">
                             <table className="crud-table">
-                                <thead><tr><th>Name</th><th>Institution</th><th>Asset Class</th><th>Balance</th><th>Actions</th></tr></thead>
+                                <thead><tr><th>Name</th><th>Institution</th><th>Type</th><th>Balance / Limit</th><th>Actions</th></tr></thead>
                                 <tbody>
                                     {accounts.map(acc => (
                                         <tr key={acc.id}>
@@ -423,8 +443,13 @@ function ConsoleDashboard() {
                                             {acc.retirementAsset && <div style={{marginTop:'6px', fontSize:'11px', color:'#047857'}}>Retirement Asset</div>}
                                         </td>
                                             <td>{acc.institution}</td>
-                                            <td><span className="category-badge">{acc.assetClass}</span></td>
-                                            <td style={{fontWeight:'700'}}>₹{acc.balance?.toLocaleString('en-IN')}</td>
+                                            <td><span className="category-badge">{acc.accountType}</span></td>
+                                            <td style={{fontWeight:'700'}}>
+                                                ₹{acc.balance?.toLocaleString('en-IN')}
+                                                {acc.accountType === 'CREDIT_CARD' && acc.creditLimit && (
+                                                    <div style={{fontSize:'12px', color:'#64748b'}}>Limit: ₹{acc.creditLimit.toLocaleString('en-IN')}</div>
+                                                )}
+                                            </td>
                                             <td>
                                                 <button className="action-btn edit" onClick={() => setEditingItem(acc)}>Edit</button>
                                                 <button className="action-btn delete" onClick={() => removeAccount(acc.id)}>Drop</button>
@@ -687,6 +712,10 @@ function ConsoleDashboard() {
                                 <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
                                     <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Current Month Spend</div>
                                     <div style={{fontSize:'28px', fontWeight:'800'}}>₹{metrics.monthlyExpenseTotal?.toLocaleString('en-IN') || '0'}</div>
+                                </div>
+                                <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
+                                    <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Credit Card Spend</div>
+                                    <div style={{fontSize:'28px', fontWeight:'800'}}>₹{metrics.monthlyCreditCardSpend?.toLocaleString('en-IN') || '0'}</div>
                                 </div>
                                 <div style={{padding:'16px', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white'}}>
                                     <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Top Expense Categories</div>

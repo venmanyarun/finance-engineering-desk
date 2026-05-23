@@ -116,6 +116,7 @@ public class FinanceController {
 
         YearMonth currentMonth = YearMonth.now();
         BigDecimal monthlyExpenseTotal = BigDecimal.ZERO;
+        BigDecimal monthlyCreditCardSpend = BigDecimal.ZERO; // New metric for credit card spend
         Map<String, BigDecimal> monthlyExpenseByCategory = new HashMap<>();
         for (Transaction tx : transactions) {
             if (tx.getTransactionDate() != null && YearMonth.from(tx.getTransactionDate()).equals(currentMonth) && isExpenseTransaction(tx.getType())) {
@@ -123,10 +124,16 @@ public class FinanceController {
                 monthlyExpenseTotal = monthlyExpenseTotal.add(amount);
                 String categoryKey = tx.getCategory() != null ? tx.getCategory().name() : "UNCATEGORIZED";
                 monthlyExpenseByCategory.put(categoryKey, monthlyExpenseByCategory.getOrDefault(categoryKey, BigDecimal.ZERO).add(amount));
+
+                // Check if the transaction is from a credit card
+                if (tx.getSourceAccount() != null && tx.getSourceAccount().getAccountType() == FinancialAccount.AccountType.CREDIT_CARD) {
+                    monthlyCreditCardSpend = monthlyCreditCardSpend.add(amount);
+                }
             }
         }
         metrics.put("monthlyExpenseTotal", monthlyExpenseTotal);
         metrics.put("monthlyExpenseByCategory", monthlyExpenseByCategory);
+        metrics.put("monthlyCreditCardSpend", monthlyCreditCardSpend); // Add to metrics
         metrics.put("totalDeathBenefit", totalDeathBenefit);
         
         metrics.put("cashFlowForecast", projectionService.getForecast(1, userId));

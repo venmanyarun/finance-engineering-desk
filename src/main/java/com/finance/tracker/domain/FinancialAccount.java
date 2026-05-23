@@ -61,6 +61,9 @@ public class FinancialAccount {
     private Integer totalTenureMonths;
     private Integer remainingTenureMonths;
 
+    @Column(precision = 15, scale = 2)
+    private BigDecimal creditLimit; // New field for credit cards
+
     public enum AssetClass {
         CASH_EQUIVALENTS, FIXED_INCOME, EQUITIES, RETIREMENT, REAL_ESTATE, LIABILITIES
     }
@@ -90,8 +93,44 @@ public class FinancialAccount {
     public void setBalanceUpdatedDate(LocalDate balanceUpdatedDate) { this.balanceUpdatedDate = balanceUpdatedDate; }
     public AssetClass getAssetClass() { return assetClass; }
     public void setAssetClass(AssetClass assetClass) { this.assetClass = assetClass; }
+    
     public AccountType getAccountType() { return accountType; }
-    public void setAccountType(AccountType accountType) { this.accountType = accountType; }
+    public void setAccountType(AccountType accountType) {
+        this.accountType = accountType;
+        // Automatically set assetClass based on accountType
+        switch (accountType) {
+            case SAVINGS_ACCOUNT:
+            case CURRENT_ACCOUNT:
+            case CASH_WALLET:
+                this.assetClass = AssetClass.CASH_EQUIVALENTS;
+                break;
+            case FIXED_DEPOSIT:
+            case RECURRING_DEPOSIT:
+                this.assetClass = AssetClass.FIXED_INCOME;
+                break;
+            case MUTUAL_FUND:
+            case EQUITY_STOCKS:
+                this.assetClass = AssetClass.EQUITIES;
+                break;
+            case PROVIDENT_FUND:
+            case PUBLIC_PROVIDENT_FUND:
+            case NPS:
+                this.assetClass = AssetClass.RETIREMENT;
+                break;
+            case HOME_LOAN:
+            case PERSONAL_LOAN:
+            case VEHICLE_LOAN:
+            case CREDIT_CARD:
+                this.assetClass = AssetClass.LIABILITIES;
+                break;
+            default:
+                // Fallback for any new types or if a specific mapping isn't clear
+                // For now, setting to LIABILITIES as it's a safe default for unknown financial obligations
+                this.assetClass = AssetClass.LIABILITIES; 
+                break;
+        }
+    }
+
     public LocalDate getMaturityDate() { return maturityDate; }
     public void setMaturityDate(LocalDate maturityDate) { this.maturityDate = maturityDate; }
     public BigDecimal getMaturityAmount() { return maturityAmount; }
@@ -107,6 +146,10 @@ public class FinancialAccount {
     public Integer getRemainingTenureMonths() { return remainingTenureMonths; }
     public void setRemainingTenureMonths(Integer remainingTenureMonths) { this.remainingTenureMonths = remainingTenureMonths; }
     
+    // New getter and setter for creditLimit
+    public BigDecimal getCreditLimit() { return creditLimit; }
+    public void setCreditLimit(BigDecimal creditLimit) { this.creditLimit = creditLimit; }
+
     public boolean isLiability() {
         return this.assetClass == AssetClass.LIABILITIES;
     }
