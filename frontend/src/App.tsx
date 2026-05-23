@@ -136,12 +136,22 @@ function ConsoleDashboard() {
 
     // State for the account form's selected account type
     const [accountFormAccountType, setAccountFormAccountType] = useState('SAVINGS_ACCOUNT');
+    // State for the obligation form's selected category
+    const [obligationFormCategory, setObligationFormCategory] = useState('HOUSEHOLD_EXPENSE');
 
     useEffect(() => {
         if (editingItem && activeTab === 'ACCOUNTS') {
             setAccountFormAccountType(editingItem.accountType || 'SAVINGS_ACCOUNT');
         } else if (activeTab === 'ACCOUNTS' && subTab === 'ADD') {
             setAccountFormAccountType('SAVINGS_ACCOUNT'); // Reset for new account
+        }
+    }, [editingItem, activeTab, subTab]);
+
+    useEffect(() => {
+        if (editingItem && activeTab === 'OBLIGATIONS') {
+            setObligationFormCategory(editingItem.category || 'HOUSEHOLD_EXPENSE');
+        } else if (activeTab === 'OBLIGATIONS' && subTab === 'ADD') {
+            setObligationFormCategory('HOUSEHOLD_EXPENSE'); // Reset for new obligation
         }
     }, [editingItem, activeTab, subTab]);
 
@@ -272,6 +282,19 @@ function ConsoleDashboard() {
         if (txCategoryFilter === 'ALL') return transactions;
         return transactions.filter(tx => (tx.category || 'UNCATEGORIZED') === txCategoryFilter);
     }, [transactions, txCategoryFilter]);
+
+    // Determine if Insurance & Maturity Details should be shown
+    const showInsuranceMaturity = useMemo(() => {
+        const insuranceCategories = ['HEALTH_INSURANCE', 'LIFE_INSURANCE', 'VEHICLE_INSURANCE', 'GUARANTEED_RETURN', 'ULIP'];
+        return insuranceCategories.includes(obligationFormCategory);
+    }, [obligationFormCategory]);
+
+    // Determine if Recurring Maturity Return / Annuity should be shown
+    const showRecurringMaturity = useMemo(() => {
+        const recurringCategories = ['GUARANTEED_RETURN', 'ULIP'];
+        return recurringCategories.includes(obligationFormCategory);
+    }, [obligationFormCategory]);
+
 
     if (loading) return <div>Initialising Console...</div>;
     if (!user) return <AuthForms />;
@@ -579,7 +602,11 @@ function ConsoleDashboard() {
                                     </select>
                                 </FormField>
                                 <FormField label="Category" tooltip="Classification">
-                                    <select name="category" defaultValue={editingItem?.category || 'HOUSEHOLD_EXPENSE'}>
+                                    <select 
+                                        name="category" 
+                                        defaultValue={editingItem?.category || 'HOUSEHOLD_EXPENSE'}
+                                        onChange={(e) => setObligationFormCategory(e.target.value)}
+                                    >
                                         <option value="HOUSEHOLD_EXPENSE">Household Expense</option>
                                         <option value="LOAN_EMI">Loan EMI</option>
                                         <option value="INVESTMENT_SIP">Investment SIP</option>
@@ -605,27 +632,34 @@ function ConsoleDashboard() {
                                         Consider this obligation as part of retirement planning
                                     </label>
                                 </FormField>
-                                <h4 style={{marginTop:'20px', borderTop:'1px solid #e2e8f0', paddingTop:'15px', color:'#1e3a8a'}}>Insurance & Maturity Details (Optional)</h4>
-                                <FormField label="Death Benefit / Sum Assured" tooltip="One-time payout to family"><input type="number" step="1" name="deathBenefitAmount" defaultValue={editingItem?.deathBenefitAmount} placeholder="₹" /></FormField>
-                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
-                                    <FormField label="One-time Maturity Payout" tooltip="Lump sum at the end"><input type="number" step="0.01" name="lumpSumMaturityAmount" defaultValue={editingItem?.lumpSumMaturityAmount} /></FormField>
-                                    <FormField label="Maturity Payout Date" tooltip="Date of lump sum"><input type="date" name="lumpSumMaturityDate" defaultValue={editingItem?.lumpSumMaturityDate} /></FormField>
-                                </div>
-
-                                <h4 style={{marginTop:'20px', borderTop:'1px solid #e2e8f0', paddingTop:'15px', color:'#1e3a8a'}}>Recurring Maturity Return / Annuity (Optional)</h4>
-                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
-                                    <FormField label="Recurring Return Amount" tooltip="Annuity or survival benefit"><input type="number" step="0.01" name="maturityIncomeAmount" defaultValue={editingItem?.maturityIncomeAmount} /></FormField>
-                                    <FormField label="Return Start Date" tooltip="When income begins"><input type="date" name="maturityIncomeStartDate" defaultValue={editingItem?.maturityIncomeStartDate} /></FormField>
-                                </div>
-                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
-                                    <FormField label="Return Duration (Years)" tooltip="How many years it lasts"><input type="number" name="maturityIncomeDurationYears" defaultValue={editingItem?.maturityIncomeDurationYears} /></FormField>
-                                    <FormField label="Return Frequency" tooltip="Payout cycle">
-                                        <select name="maturityIncomeFrequency" defaultValue={editingItem?.maturityIncomeFrequency || 'YEARLY'}>
-                                            <option value="YEARLY">Yearly</option>
-                                            <option value="MONTHLY">Monthly</option>
-                                        </select>
-                                    </FormField>
-                                </div>
+                                {showInsuranceMaturity && (
+                                    <>
+                                        <h4 style={{marginTop:'20px', borderTop:'1px solid #e2e8f0', paddingTop:'15px', color:'#1e3a8a'}}>Insurance & Maturity Details (Optional)</h4>
+                                        <FormField label="Death Benefit / Sum Assured" tooltip="One-time payout to family"><input type="number" step="1" name="deathBenefitAmount" defaultValue={editingItem?.deathBenefitAmount} placeholder="₹" /></FormField>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
+                                            <FormField label="One-time Maturity Payout" tooltip="Lump sum at the end"><input type="number" step="0.01" name="lumpSumMaturityAmount" defaultValue={editingItem?.lumpSumMaturityAmount} /></FormField>
+                                            <FormField label="Maturity Payout Date" tooltip="Date of lump sum"><input type="date" name="lumpSumMaturityDate" defaultValue={editingItem?.lumpSumMaturityDate} /></FormField>
+                                        </div>
+                                    </>
+                                )}
+                                {showRecurringMaturity && (
+                                    <>
+                                        <h4 style={{marginTop:'20px', borderTop:'1px solid #e2e8f0', paddingTop:'15px', color:'#1e3a8a'}}>Recurring Maturity Return / Annuity (Optional)</h4>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
+                                            <FormField label="Recurring Return Amount" tooltip="Annuity or survival benefit"><input type="number" step="0.01" name="maturityIncomeAmount" defaultValue={editingItem?.maturityIncomeAmount} /></FormField>
+                                            <FormField label="Return Start Date" tooltip="When income begins"><input type="date" name="maturityIncomeStartDate" defaultValue={editingItem?.maturityIncomeStartDate} /></FormField>
+                                        </div>
+                                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px'}}>
+                                            <FormField label="Return Duration (Years)" tooltip="How many years it lasts"><input type="number" name="maturityIncomeDurationYears" defaultValue={editingItem?.maturityIncomeDurationYears} /></FormField>
+                                            <FormField label="Return Frequency" tooltip="Payout cycle">
+                                                <select name="maturityIncomeFrequency" defaultValue={editingItem?.maturityIncomeFrequency || 'YEARLY'}>
+                                                    <option value="YEARLY">Yearly</option>
+                                                    <option value="MONTHLY">Monthly</option>
+                                                </select>
+                                            </FormField>
+                                        </div>
+                                    </>
+                                )}
                                 <button type="submit" className="btn-primary">Commit Architecture</button>
                             </form>
                         </div>
@@ -760,9 +794,9 @@ function ConsoleDashboard() {
                                             <option value="SUBSCRIPTION">Subscription</option>
                                             <option value="GUARANTEED_RETURN">Guaranteed Return</option>
                                             <option value="ULIP">ULIP</option>
-                                            <option value="HEALTH_INSURANCE">Health Insurance</option>
-                                            <option value="LIFE_INSURANCE">Life Insurance</option>
-                                            <option value="VEHICLE_INSURANCE">Vehicle Insurance</option>
+                                            <option value="HEALTH_INSURANCE">Health_Insurance</option>
+                                            <option value="LIFE_INSURANCE">Life_Insurance</option>
+                                            <option value="VEHICLE_INSURANCE">Vehicle_Insurance</option>
                                             <option value="OTHER">Other</option>
                                         </select>
                                     </div>
@@ -868,13 +902,12 @@ function ConsoleDashboard() {
                                             </tr>
                                         );
                                     })}
-                                </tbody>
-                            </table>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-
+                )}
             {activeTab === 'RETIREMENT' && (
                 <div style={{display:'grid', gap:'24px'}}>
                     <div className="workspace-panel" style={{padding:'20px', borderRadius:'12px', border:'1px solid #e2e8f0', background:'white'}}>
@@ -902,6 +935,11 @@ function ConsoleDashboard() {
                                 <div style={{fontSize:11, color:'#64748b'}}>Current balances from retirement-marked accounts</div>
                             </div>
                             <div className="metric-display-panel" style={{background:'#eff6ff', border:'1px solid #bfdbfe'}}>
+                                <label className="panel-label">Projected Contributions</label>
+                                <h3 className="panel-amount" style={{color:'#1e40af'}}>₹{(retirementProjection?.projectedContributions || 0)?.toLocaleString('en-IN')}</h3>
+                                <div style={{fontSize:11, color:'#64748b'}}>Future contributions to retirement accounts</div>
+                            </div>
+                            <div className="metric-display-panel" style={{background:'#eff6ff', border:'1px solid #bfdbfe'}}>
                                 <label className="panel-label">Projected Retirement Income</label>
                                 <h3 className="panel-amount" style={{color:'#1e40af'}}>₹{(retirementProjection?.projectedRecurringIncome || 0)?.toLocaleString('en-IN')}</h3>
                                 <div style={{fontSize:11, color:'#64748b'}}>Recurring annuity and maturity income in range</div>
@@ -924,7 +962,7 @@ function ConsoleDashboard() {
                             <div>
                                 <h5>Retirement Accounts</h5>
                                 <table className="crud-table">
-                                    <thead><tr><th>Name</th><th>Institution</th><th>Balance</th></tr></thead>
+                                    <thead><tr><th>Name</th><th>Institution</th><th>Balance (as of today)</th></tr></thead>
                                     <tbody>
                                         {retirementProjection?.retirementAccounts?.length ? retirementProjection.retirementAccounts.map((account, idx) => (
                                             <tr key={idx}>
@@ -937,17 +975,34 @@ function ConsoleDashboard() {
                                 </table>
                             </div>
                             <div>
+                                <h5>Projected Contributions</h5>
+                                <table className="crud-table">
+                                    <thead><tr><th>Source</th><th>Account</th><th>Projected Total (in selected range)</th></tr></thead>
+                                    <tbody>
+                                        {retirementProjection?.retirementContributions?.length ? retirementProjection.retirementContributions.map((contrib, idx) => (
+                                            <tr key={idx}>
+                                                <td>{contrib.name}</td>
+                                                <td>{contrib.accountName}</td>
+                                                <td style={{fontWeight:'700'}}>₹{Number(contrib.amount || 0).toLocaleString('en-IN')}</td>
+                                            </tr>
+                                        )) : <tr><td colSpan={3} style={{color:'#64748b', padding:'12px'}}>No projected contributions.</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div>
                                 <h5>Retirement Instruments</h5>
                                 <table className="crud-table">
-                                    <thead><tr><th>Obligation</th><th>Recurring Income</th><th>Lump Sum</th></tr></thead>
+                                    <thead><tr><th>Obligation</th><th>Recurring Income</th><th>Lump Sum</th><th>Maturity Date</th><th>Income Start Date</th></tr></thead>
                                     <tbody>
                                         {retirementProjection?.retirementObligations?.length ? retirementProjection.retirementObligations.map((obl, idx) => (
                                             <tr key={idx}>
                                                 <td>{obl.instrumentName}</td>
                                                 <td style={{color:'#1e40af'}}>₹{Number(obl.projectedRecurringIncome || 0).toLocaleString('en-IN')}</td>
                                                 <td style={{color:'#be123c'}}>₹{Number(obl.projectedLumpSum || 0).toLocaleString('en-IN')}</td>
+                                                <td>{obl.lumpSumMaturityDate || 'N/A'}</td>
+                                                <td>{obl.maturityIncomeStartDate || 'N/A'}</td>
                                             </tr>
-                                        )) : <tr><td colSpan={3} style={{color:'#64748b', padding:'12px'}}>No retirement obligations defined.</td></tr>}
+                                        )) : <tr><td colSpan={5} style={{color:'#64748b', padding:'12px'}}>No retirement obligations defined.</td></tr>}
                                     </tbody>
                                 </table>
                             </div>

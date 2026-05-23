@@ -54,9 +54,11 @@ public class ProjectionService {
         public BigDecimal retirementAccountBalance = BigDecimal.ZERO;
         public BigDecimal projectedRecurringIncome = BigDecimal.ZERO;
         public BigDecimal projectedLumpSum = BigDecimal.ZERO;
+        public BigDecimal projectedContributions = BigDecimal.ZERO; // New field for income contributions
         public BigDecimal totalProjectedRetirement = BigDecimal.ZERO;
         public List<Map<String, Object>> retirementAccounts = new ArrayList<>();
         public List<Map<String, Object>> retirementObligations = new ArrayList<>();
+        public List<Map<String, Object>> retirementContributions = new ArrayList<>(); // New field for detailed income contributions
     }
 
     public RetirementProjection getRetirementProjection(YearMonth fromMonth, YearMonth toMonth, Long userId) {
@@ -68,45 +70,100 @@ public class ProjectionService {
 
         RetirementProjection projection = new RetirementProjection();
 
+        // 1. Process existing retirement account balances
         List<FinancialAccount> accounts = accountRepository.findByUserId(userId);
         for (FinancialAccount account : accounts) {
             if (account.isRetirementAsset()) {
                 BigDecimal bal = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
                 projection.retirementAccountBalance = projection.retirementAccountBalance.add(bal);
+
                 Map<String, Object> accountDetail = new HashMap<>();
                 accountDetail.put("name", account.getName());
                 accountDetail.put("balance", bal);
                 accountDetail.put("institution", account.getInstitution());
                 projection.retirementAccounts.add(accountDetail);
+
+                log.debug("Retirement Account: {} (Balance: {})", account.getName(), bal);
             }
         }
 
+        // 2. Process projected contributions from IncomeSources linked to retirement assets
+        List<IncomeSource> incomeSources = incomeRepository.findByUserId(userId);
+        for (IncomeSource income : incomeSources) {
+            // Ensure income is active and linked to a retirement asset
+            if (income.isActive() && income.getDestinationAccount() != null && income.getDestinationAccount().isRetirementAsset()) {
+                log.debug("Processing IncomeSource for retirement projection: {} (Destination Account: {})", income.getName(), income.getDestinationAccount().getName());
+
+                BigDecimal totalContribution = calculateTotalFlowInWindow(
+                    income.getNextExpectedDate() != null ? income.getNextExpectedDate() : income.getStartDate(),
+                    null, // Income sources typically don't have an end date for recurring contributions
+                    income.getFrequency(),
+                    income.getAmount(),
+                    windowStart,
+                    windowEnd
+                );
+
+                if (totalContribution.compareTo(BigDecimal.ZERO) > 0) {
+                    projection.projectedContributions = projection.projectedContributions.add(totalContribution);
+                    Map<String, Object> contributionDetail = new HashMap<>();
+                    contributionDetail.put("name", income.getName());
+                    contributionDetail.put("accountName", income.getDestinationAccount().getName());
+                    contributionDetail.put("amount", totalContribution);
+                    projection.retirementContributions.add(contributionDetail);
+                    log.debug("Projected Income Contribution: {} (Account: {}, Amount: {})", income.getName(), income.getDestinationAccount().getName(), totalContribution);
+                } else {
+                    log.debug("IncomeSource {} has no contributions within the window.", income.getName());
+                }
+            } else {
+                log.debug("Skipping IncomeSource {} (Active: {}, Destination Account Retirement Asset: {})", 
+                          income.getName(), income.isActive(), 
+                          (income.getDestinationAccount() != null ? income.getDestinationAccount().isRetirementAsset() : "N/A"));
+            }
+        }
+
+        // 3. Process projected income and lump sums from RecurringObligations marked as retirement instruments
         List<RecurringObligation> obligations = obligationRepository.findByUserId(userId);
         for (RecurringObligation obligation : obligations) {
             if (!obligation.isRetirementInstrument()) continue;
+            
             BigDecimal incomeTotal = BigDecimal.ZERO;
             BigDecimal lumpTotal = BigDecimal.ZERO;
             Map<String, Object> obligationDetail = new HashMap<>();
             obligationDetail.put("instrumentName", obligation.getInstrumentName());
             obligationDetail.put("category", obligation.getCategory());
 
-            if (obligation.getMaturityIncomeAmount() != null && obligation.getMaturityIncomeAmount().compareTo(BigDecimal.ZERO) > 0 && obligation.getMaturityIncomeStartDate() != null) {
-                LocalDate current = obligation.getMaturityIncomeStartDate();
-                LocalDate maturityEnd = obligation.getMaturityIncomeStartDate().plusYears(obligation.getMaturityIncomeDurationYears() != null ? obligation.getMaturityIncomeDurationYears() : 0);
-                while (!current.isAfter(windowEnd)) {
-                    if (!current.isBefore(windowStart) && (maturityEnd == null || !current.isAfter(maturityEnd))) {
-                        incomeTotal = incomeTotal.add(obligation.getMaturityIncomeAmount());
-                    }
-                    if (obligation.getMaturityIncomeFrequency() == RecurringObligation.PaymentFrequency.ONE_TIME) break;
-                    current = advanceDate(current, obligation.getMaturityIncomeFrequency());
-                    if (maturityEnd != null && current.isAfter(maturityEnd)) break;
-                }
+            // Add maturity dates to obligationDetail
+            if (obligation.getLumpSumMaturityDate() != null) {
+                obligationDetail.put("lumpSumMaturityDate", obligation.getLumpSumMaturityDate().toString());
+            }
+            if (obligation.getMaturityIncomeStartDate() != null) {
+                obligationDetail.put("maturityIncomeStartDate", obligation.getMaturityIncomeStartDate().toString());
             }
 
+
+            // Calculate recurring maturity income
+            if (obligation.getMaturityIncomeAmount() != null && obligation.getMaturityIncomeAmount().compareTo(BigDecimal.ZERO) > 0 && obligation.getMaturityIncomeStartDate() != null) {
+                LocalDate maturityEnd = null;
+                if (obligation.getMaturityIncomeDurationYears() != null) {
+                    maturityEnd = obligation.getMaturityIncomeStartDate().plusYears(obligation.getMaturityIncomeDurationYears());
+                }
+                incomeTotal = calculateTotalFlowInWindow(
+                    obligation.getMaturityIncomeStartDate(),
+                    maturityEnd,
+                    obligation.getMaturityIncomeFrequency(),
+                    obligation.getMaturityIncomeAmount(),
+                    windowStart,
+                    windowEnd
+                );
+                log.debug("Obligation Recurring Income: {} (Amount: {})", obligation.getInstrumentName(), incomeTotal);
+            }
+
+            // Calculate one-time lump sum maturity
             if (obligation.getLumpSumMaturityAmount() != null && obligation.getLumpSumMaturityDate() != null) {
                 LocalDate payout = obligation.getLumpSumMaturityDate();
                 if (!payout.isBefore(windowStart) && !payout.isAfter(windowEnd)) {
                     lumpTotal = lumpTotal.add(obligation.getLumpSumMaturityAmount());
+                    log.debug("Obligation Lump Sum: {} (Amount: {})", obligation.getInstrumentName(), lumpTotal);
                 }
             }
 
@@ -121,9 +178,50 @@ public class ProjectionService {
 
         projection.totalProjectedRetirement = projection.retirementAccountBalance
                 .add(projection.projectedRecurringIncome)
-                .add(projection.projectedLumpSum);
+                .add(projection.projectedLumpSum)
+                .add(projection.projectedContributions); // Include projected contributions
+
+        log.info("Retirement Projection Summary: Balance={}, RecurringIncome={}, LumpSum={}, Contributions={}, Total={}", 
+                 projection.retirementAccountBalance, projection.projectedRecurringIncome, 
+                 projection.projectedLumpSum, projection.projectedContributions, projection.totalProjectedRetirement);
         return projection;
     }
+
+    // Helper method to calculate total flow within a window
+    private BigDecimal calculateTotalFlowInWindow(LocalDate startDate, LocalDate endDate, RecurringObligation.PaymentFrequency freq, BigDecimal amount, LocalDate windowStart, LocalDate windowEnd) {
+        if (startDate == null || freq == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal totalFlow = BigDecimal.ZERO;
+        LocalDate current = startDate;
+
+        // Adjust current to the first occurrence within or after windowStart
+        while (current.isBefore(windowStart)) {
+            if (freq == RecurringObligation.PaymentFrequency.ONE_TIME) {
+                return BigDecimal.ZERO; // One-time event before window, so no contribution
+            }
+            current = advanceDate(current, freq);
+            if (endDate != null && current.isAfter(endDate)) {
+                return BigDecimal.ZERO; // Flow ended before window
+            }
+        }
+
+        // Sum contributions within the window
+        while (!current.isAfter(windowEnd)) {
+            if (endDate != null && current.isAfter(endDate)) {
+                break; // Flow ended within the window
+            }
+
+            totalFlow = totalFlow.add(amount);
+            if (freq == RecurringObligation.PaymentFrequency.ONE_TIME) {
+                break; // One-time event, only count once
+            }
+            current = advanceDate(current, freq);
+        }
+        return totalFlow;
+    }
+
 
     public List<CashFlowPoint> getForecast(int years, Long userId) {
         log.info("getForecast called for userId: {}, years: {}", userId, years);
@@ -135,6 +233,7 @@ public class ProjectionService {
             String desc = String.join(", ", snap.events);
             forecast.add(new CashFlowPoint(snap.month, snap.totalInflow, snap.totalOutflow, desc));
         }
+
         return forecast;
     }
 
@@ -188,6 +287,7 @@ public class ProjectionService {
         return new ArrayList<>(projectionMap.values());
     }
 
+
     private void applyFlow(Map<YearMonth, MonthlySnapshot> map, LocalDate startDate, LocalDate endDate, RecurringObligation.PaymentFrequency freq, BigDecimal amount, boolean isInflow, String desc, YearMonth windowStart, YearMonth windowEnd) {
         if (startDate == null || freq == null || amount == null) return;
         
@@ -216,6 +316,7 @@ public class ProjectionService {
             if (freq == RecurringObligation.PaymentFrequency.ONE_TIME) break;
             current = advanceDate(current, freq);
         }
+
     }
 
     private LocalDate advanceDate(LocalDate date, RecurringObligation.PaymentFrequency freq) {
