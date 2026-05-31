@@ -16,25 +16,82 @@ function FormField({ label, tooltip, children }) {
 }
 
 function AuthForms() {
-    const { login, register } = useFinance();
+    const { login, register, requestPasswordReset, validateResetToken, resetPassword } = useFinance();
     const [isLogin, setIsLogin] = useState(true);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
     const [message, setMessage] = useState('');
+    const [showPasswordReset, setShowPasswordReset] = useState(false);
+    const [resetStep, setResetStep] = useState(1); // 1: request, 2: validate token, 3: reset password
+    const [resetUsername, setResetUsername] = useState('');
+    const [resetToken, setResetToken] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [resetMessage, setResetMessage] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (isLogin) {
-            const success = await login(username, password);
+            const success = await login(username, password, rememberMe);
             if (!success) setMessage('Login failed. Check credentials.');
         } else {
             const success = await register(username, password);
             if (success) {
                 setMessage('Registered! Now please login.');
                 setIsLogin(true);
+                setUsername('');
+                setPassword('');
             } else {
                 setMessage('Registration failed.');
             }
+        }
+    };
+
+    const handlePasswordResetRequest = async (e) => {
+        e.preventDefault();
+        const result = await requestPasswordReset(resetUsername);
+        if (result) {
+            setResetMessage(`Reset token generated! Token: ${result.resetToken}`);
+            setResetStep(2);
+        } else {
+            setResetMessage('User not found or request failed.');
+        }
+    };
+
+    const handleValidateToken = async (e) => {
+        e.preventDefault();
+        const isValid = await validateResetToken(resetToken);
+        if (isValid) {
+            setResetMessage('Token is valid. Enter your new password.');
+            setResetStep(3);
+        } else {
+            setResetMessage('Invalid or expired token.');
+        }
+    };
+
+    const handleResetPasswordSubmit = async (e) => {
+        e.preventDefault();
+        if (newPassword !== confirmPassword) {
+            setResetMessage('Passwords do not match.');
+            return;
+        }
+        if (newPassword.length < 6) {
+            setResetMessage('Password must be at least 6 characters.');
+            return;
+        }
+        const success = await resetPassword(resetToken, newPassword);
+        if (success) {
+            setResetMessage('Password reset successfully! Please login with your new password.');
+            setShowPasswordReset(false);
+            setResetStep(1);
+            setResetUsername('');
+            setResetToken('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setIsLogin(true);
+        } else {
+            setResetMessage('Failed to reset password. Try again.');
         }
     };
 
@@ -45,17 +102,67 @@ function AuthForms() {
                     <h2 className="workspace-title" style={{fontSize: '28px', color: '#1e3a8a'}}>Finance Desk</h2>
                     <p className="workspace-tagline" style={{marginTop: '6px'}}>Engineering-Grade Accounting Console</p>
                 </div>
-                <form onSubmit={handleSubmit} style={{display:'flex', flexDirection:'column', gap:'16px'}}>
-                    <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required minLength={3} style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
-                    <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
-                    <button type="submit" className="btn-primary" style={{borderRadius: '8px', padding: '12px', fontWeight: '700', backgroundColor: '#1e3a8a'}}>
-                        {isLogin ? 'Sign In' : 'Create Account'}
-                    </button>
-                    <button type="button" className="btn-secondary" onClick={() => { setIsLogin(!isLogin); setMessage(''); }} style={{background: 'transparent', color: '#475569', border: 'none', marginTop: '10px'}}>
-                        {isLogin ? "Don't have an account? Register" : 'Already have an account? Login'}
-                    </button>
-                    {message && <p style={{color: '#ef4444', textAlign:'center', fontSize: '14px'}}>{message}</p>}
-                </form>
+                
+                {showPasswordReset ? (
+                    <div>
+                        {resetStep === 1 && (
+                            <form onSubmit={handlePasswordResetRequest} style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+                                <h3 style={{fontSize: '18px', color: '#1e3a8a', marginBottom: '8px'}}>Reset Password</h3>
+                                <input type="text" placeholder="Username" value={resetUsername} onChange={e => setResetUsername(e.target.value)} required style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
+                                <button type="submit" className="btn-primary" style={{borderRadius: '8px', padding: '12px', fontWeight: '700', backgroundColor: '#1e3a8a'}}>
+                                    Request Reset
+                                </button>
+                            </form>
+                        )}
+                        
+                        {resetStep === 2 && (
+                            <form onSubmit={handleValidateToken} style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+                                <h3 style={{fontSize: '18px', color: '#1e3a8a', marginBottom: '8px'}}>Verify Reset Token</h3>
+                                <input type="text" placeholder="Paste your reset token here" value={resetToken} onChange={e => setResetToken(e.target.value)} required style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
+                                <button type="submit" className="btn-primary" style={{borderRadius: '8px', padding: '12px', fontWeight: '700', backgroundColor: '#1e3a8a'}}>
+                                    Validate Token
+                                </button>
+                            </form>
+                        )}
+                        
+                        {resetStep === 3 && (
+                            <form onSubmit={handleResetPasswordSubmit} style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+                                <h3 style={{fontSize: '18px', color: '#1e3a8a', marginBottom: '8px'}}>Set New Password</h3>
+                                <input type="password" placeholder="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6} style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
+                                <input type="password" placeholder="Confirm Password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required minLength={6} style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
+                                <button type="submit" className="btn-primary" style={{borderRadius: '8px', padding: '12px', fontWeight: '700', backgroundColor: '#1e3a8a'}}>
+                                    Reset Password
+                                </button>
+                            </form>
+                        )}
+                        
+                        <button type="button" className="btn-secondary" onClick={() => { setShowPasswordReset(false); setResetStep(1); setResetMessage(''); }} style={{background: 'transparent', color: '#475569', border: 'none', marginTop: '16px', textAlign: 'center'}}>
+                            Back to Login
+                        </button>
+                        {resetMessage && <p style={{color: resetMessage.includes('successfully') ? '#059669' : '#ef4444', textAlign:'center', fontSize: '13px', marginTop: '12px'}}>{resetMessage}</p>}
+                    </div>
+                ) : (
+                    <form onSubmit={handleSubmit} style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+                        <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required minLength={3} style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
+                        <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} style={{padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1'}} />
+                        
+                        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                            <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} style={{cursor: 'pointer'}} />
+                            <label htmlFor="rememberMe" style={{cursor: 'pointer', fontSize: '14px', color: '#475569', margin: 0}}>Remember me for 30 days</label>
+                        </div>
+                        
+                        <button type="submit" className="btn-primary" style={{borderRadius: '8px', padding: '12px', fontWeight: '700', backgroundColor: '#1e3a8a'}}>
+                            {isLogin ? 'Sign In' : 'Create Account'}
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={() => { setIsLogin(!isLogin); setMessage(''); }} style={{background: 'transparent', color: '#475569', border: 'none', marginTop: '10px'}}>
+                            {isLogin ? "Don't have an account? Register" : 'Already have an account? Login'}
+                        </button>
+                        {isLogin && <button type="button" className="btn-secondary" onClick={() => { setShowPasswordReset(true); setResetMessage(''); }} style={{background: 'transparent', color: '#0066cc', border: 'none', textDecoration: 'underline', marginTop: '6px'}}>
+                            Forgot password?
+                        </button>}
+                        {message && <p style={{color: '#ef4444', textAlign:'center', fontSize: '14px'}}>{message}</p>}
+                    </form>
+                )}
             </div>
         </div>
     );

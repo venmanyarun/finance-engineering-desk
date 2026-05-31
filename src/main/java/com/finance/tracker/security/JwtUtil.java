@@ -40,6 +40,16 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateRememberMeToken(String username) {
+        logger.debug("Generating remember me token for user: {}", username);
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24 * 30)) // 30 days
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }

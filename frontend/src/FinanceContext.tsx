@@ -58,16 +58,17 @@ export function FinanceProvider({ children }) {
         fetchCoreTelemetry();
     }, [fetchCoreTelemetry]);
 
-    const login = async (username, password) => {
+    const login = async (username, password, rememberMe = false) => {
         const res = await fetch('http://localhost:8080/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password, rememberMe })
         });
         if (res.ok) {
             const data = await res.json();
             localStorage.setItem('token', data.token);
             localStorage.setItem('username', data.username);
+            if (rememberMe) localStorage.setItem('rememberMe', 'true');
             setUser(data.username);
             await fetchCoreTelemetry();
             return true;
@@ -181,13 +182,44 @@ export function FinanceProvider({ children }) {
         await fetchCoreTelemetry();
     };
 
+    const requestPasswordReset = async (username) => {
+        const res = await fetch('http://localhost:8080/api/auth/request-password-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            return data;
+        }
+        return null;
+    };
+
+    const validateResetToken = async (resetToken) => {
+        const res = await fetch('http://localhost:8080/api/auth/validate-reset-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resetToken })
+        });
+        return res.ok;
+    };
+
+    const resetPassword = async (resetToken, newPassword) => {
+        const res = await fetch('http://localhost:8080/api/auth/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resetToken, newPassword })
+        });
+        return res.ok;
+    };
+
 
     return (
         <FinanceContext.Provider value={{
             metrics, accounts, incomes, obligations, transactions, alerts, loading, user,
             login, register, logout, saveAccount, removeAccount, saveIncome, removeIncome,
             saveObligation, removeObligation, recordEvent, saveManualTransaction, removeTransaction,
-            fetchCoreTelemetry, getAuthHeaders
+            fetchCoreTelemetry, getAuthHeaders, requestPasswordReset, validateResetToken, resetPassword
         }}>
             {children}
         </FinanceContext.Provider>
