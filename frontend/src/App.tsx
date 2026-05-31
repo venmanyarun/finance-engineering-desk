@@ -131,6 +131,7 @@ function ConsoleDashboard() {
     const [endMonth, setEndMonth] = useState('');
     const [retirementProjection, setRetirementProjection] = useState(null);
     const [oblSortKey, setOblSortKey] = useState('instrumentName');
+    const [expandedMonthEvents, setExpandedMonthEvents] = useState(new Set()); // State for expandable events
 
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -202,6 +203,43 @@ function ConsoleDashboard() {
         const endIndex = forecast.findIndex(f => f.date === endMonth);
         return forecast.slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1);
     }, [forecast, startMonth, endMonth]);
+
+    const cumulativeProjectionData = useMemo(() => {
+        if (!rangeData.length) return [];
+
+        let currentCumulativeNet = metrics.netWorth || 0;
+
+        // Calculate cumulative net up to the startMonth
+        const startIndexInForecast = forecast.findIndex(f => f.date === startMonth);
+        if (startIndexInForecast > 0) {
+            currentCumulativeNet = forecast.slice(0, startIndexInForecast).reduce((acc, month) => {
+                const inflow = typeof month.netInflow === 'number' ? month.netInflow : parseFloat(month.netInflow || 0);
+                const outflow = typeof month.netOutflow === 'number' ? month.netOutflow : parseFloat(month.netOutflow || 0);
+                return acc + (inflow - outflow);
+            }, metrics.netWorth || 0);
+        }
+
+        const data = rangeData.map(m => {
+            const inflow = typeof m.netInflow === 'number' ? m.netInflow : parseFloat(m.netInflow || 0);
+            const outflow = typeof m.netOutflow === 'number' ? m.netOutflow : parseFloat(m.netOutflow || 0);
+            const netChange = inflow - outflow;
+            currentCumulativeNet += netChange;
+
+            const events = m.description ? m.description.split(',').map(s => s.trim()).filter(Boolean) : [];
+            console.log(`Cumulative Projection Data for ${m.date}: Events:`, events); // Debugging log
+
+            return {
+                ...m,
+                inflow: inflow,
+                outflow: outflow,
+                netChange: netChange,
+                cumulativeNet: currentCumulativeNet,
+                events: events
+            };
+        });
+        return data;
+    }, [rangeData, metrics.netWorth, startMonth, forecast]);
+
 
     const rangeMetrics = useMemo(() => {
         return rangeData.reduce((acc, curr) => {
@@ -294,6 +332,22 @@ function ConsoleDashboard() {
         const recurringCategories = ['GUARANTEED_RETURN', 'ULIP'];
         return recurringCategories.includes(obligationFormCategory);
     }, [obligationFormCategory]);
+
+    // Function to toggle expanded events for a month
+    const toggleMonthEvents = (monthDate) => {
+        console.log('Toggling events for month:', monthDate); // Debugging log
+        setExpandedMonthEvents(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(monthDate)) {
+                newSet.delete(monthDate);
+                console.log('Removed from expanded:', monthDate, 'New state size:', newSet.size); // Debugging log
+            } else {
+                newSet.add(monthDate);
+                console.log('Added to expanded:', monthDate, 'New state size:', newSet.size); // Debugging log
+            }
+            return newSet;
+        });
+    };
 
 
     if (loading) return <div>Initialising Console...</div>;
@@ -885,23 +939,66 @@ function ConsoleDashboard() {
                         <div style={{overflowX:'auto'}}>
                             <table className="crud-table">
                                 <thead>
-                                    <tr><th>Month</th><th>Inflow</th><th>Outflow</th><th>Net</th><th>Events</th></tr>
+                                    <tr>
+                                        <th></th> {/* New column for expand/collapse */}
+                                        <th>Month</th>
+                                        <th>Inflow</th>
+                                        <th>Outflow</th>
+                                        <th>Cumulative Net</th>
+                                    </tr>
                                 </thead>
                                 <tbody>
-                                    {rangeData.map((m, i) => {
-                                        const inflow = typeof m.netInflow === 'number' ? m.netInflow : parseFloat(m.netInflow || 0);
-                                        const outflow = typeof m.netOutflow === 'number' ? m.netOutflow : parseFloat(m.netOutflow || 0);
-                                        const net = inflow - outflow;
-                                        return (
-                                            <tr key={i} style={{background: net < 0 ? '#fff1f2' : 'transparent'}}>
+                                    {cumulativeProjectionData.map((m, i) => (
+                                        <React.Fragment key={m.date}>
+                                            <tr style={{background: m.netChange < 0 ? '#fff1f2' : 'transparent'}}>
+                                                <td>
+                                                    {m.events.length > 0 && (
+                                                        <button
+                                                            onClick={() => toggleMonthEvents(m.date)}
+                                                            style={{
+                                                                background: 'none',
+                                                                border: 'none',
+                                                                cursor: 'pointer',
+                                                                fontSize: '16px',
+                                                                fontWeight: 'bold',
+                                                                color: '#1e3a8a',
+                                                                padding: '0 5px'
+                                                            }}
+                                                        >
+                                                            {expandedMonthEvents.has(m.date) ? '−' : '+'}
+                                                        </button>
+                                                    )}
+                                                </td>
                                                 <td><strong>{m.date}</strong></td>
-                                                <td style={{color:'#15803d'}}>₹{inflow?.toLocaleString('en-IN')}</td>
-                                                <td style={{color:'#be123c'}}>₹{outflow?.toLocaleString('en-IN')}</td>
-                                                <td style={{fontWeight:'700', color: net >= 0 ? '#166534' : '#b91c1c'}}>₹{net.toLocaleString('en-IN')}</td>
-                                                <td>{m.description}</td>
+                                                <td style={{color:'#15803d'}}>₹{m.inflow?.toLocaleString('en-IN')}</td>
+                                                <td style={{color:'#be123c'}}>₹{m.outflow?.toLocaleString('en-IN')}</td>
+                                                <td style={{fontWeight:'700', color: m.cumulativeNet >= 0 ? '#166534' : '#b91c1c'}}>₹{m.cumulativeNet.toLocaleString('en-IN')}</td>
                                             </tr>
-                                        );
-                                    })}
+                                            {expandedMonthEvents.has(m.date) && m.events.length > 0 && (
+                                                <tr>
+                                                    <td colSpan="5" style={{ padding: '10px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                                                        <div style={{ fontWeight: '600', marginBottom: '8px', color: '#475569' }}>Events for {m.date}:</div>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                            {m.events.map((event, idx) => (
+                                                                <span key={idx} style={{
+                                                                    background: '#e0f2fe', // Light blue background
+                                                                    color: '#0284c7',     // Dark blue text
+                                                                    padding: '5px 12px',  // Increased padding
+                                                                    borderRadius: '8px',  // More rounded corners
+                                                                    fontSize: '12px',
+                                                                    whiteSpace: 'nowrap',
+                                                                    border: '1px solid #93c5fd' // Subtle border
+                                                                }}>
+                                                                    {event}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    ),
+                                    )}
                                     </tbody>
                                 </table>
                             </div>
