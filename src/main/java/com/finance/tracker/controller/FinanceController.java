@@ -352,22 +352,14 @@ public class FinanceController {
 
     private LocalDate calculateNextDate(LocalDate current, RecurringObligation.PaymentFrequency freq) {
         if (current == null) return LocalDate.now();
-        switch (freq) {
-            case MONTHLY: return current.plusMonths(1);
-            case QUARTERLY: return current.plusMonths(3);
-            case YEARLY: return current.plusYears(1);
-            default: return current;
-        }
+        if (freq == null || freq.getMonthsPerOccurrence() == 0) return current;
+        return current.plusMonths(freq.getMonthsPerOccurrence());
     }
 
     private LocalDate revertDate(LocalDate current, RecurringObligation.PaymentFrequency freq) {
         if (current == null) return null;
-        switch (freq) {
-            case MONTHLY: return current.minusMonths(1);
-            case QUARTERLY: return current.minusMonths(3);
-            case YEARLY: return current.minusYears(1);
-            default: return current;
-        }
+        if (freq == null || freq.getMonthsPerOccurrence() == 0) return current;
+        return current.minusMonths(freq.getMonthsPerOccurrence());
     }
 
     private String normalizeSymbol(String raw) {

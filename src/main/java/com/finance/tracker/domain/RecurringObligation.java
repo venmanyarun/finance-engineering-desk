@@ -63,10 +63,15 @@ public class RecurringObligation {
     private LocalDate lumpSumMaturityDate;
 
     public enum PaymentFrequency {
-        MONTHLY(12), QUARTERLY(4), YEARLY(1), ONE_TIME(0);
+        MONTHLY(12, 1), QUARTERLY(4, 3), YEARLY(1, 12), ONE_TIME(0, 0);
         private final int factor;
-        PaymentFrequency(int factor) { this.factor = factor; }
+        private final int monthsPerOccurrence;
+        PaymentFrequency(int factor, int monthsPerOccurrence) {
+            this.factor = factor;
+            this.monthsPerOccurrence = monthsPerOccurrence;
+        }
         public int getFactor() { return factor; }
+        public int getMonthsPerOccurrence() { return monthsPerOccurrence; }
     }
 
     public enum ObligationCategory {

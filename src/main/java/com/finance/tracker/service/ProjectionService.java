@@ -320,11 +320,7 @@ public class ProjectionService {
     }
 
     private LocalDate advanceDate(LocalDate date, RecurringObligation.PaymentFrequency freq) {
-        return switch (freq) {
-            case QUARTERLY -> date.plusMonths(3);
-            case YEARLY -> date.plusYears(1);
-            case ONE_TIME -> date;
-            default -> date.plusMonths(1);
-        };
+        if (freq == null || freq.getMonthsPerOccurrence() == 0) return date;
+        return date.plusMonths(freq.getMonthsPerOccurrence());
     }
 }

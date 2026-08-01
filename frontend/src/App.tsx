@@ -854,7 +854,7 @@ function ConsoleDashboard() {
                                 </div>
                             </div>
                             <table className="crud-table">
-                                <thead><tr><th>Obligation</th><th>Frequency</th><th>Amount</th><th>Annualized</th><th>Category</th><th>Source</th><th>Actions</th></tr></thead>
+                                <thead><tr><th>Obligation</th><th>Frequency</th><th>Next Due Date</th><th>Amount</th><th>Annualized</th><th>Category</th><th>Source</th><th>Actions</th></tr></thead>
                                 <tbody>
                                     {filteredObligations.map(obl => {
                                         const amountVal = typeof obl.amount === 'number' ? obl.amount : parseFloat(obl.amount || '0');
@@ -868,6 +868,7 @@ function ConsoleDashboard() {
                                                     {obl.retirementInstrument && <div style={{marginTop:'4px', fontSize:'11px', color:'#047857'}}>Retirement</div>}
                                                 </td>
                                                 <td>{obl.frequency}</td>
+                                                <td>{obl.nextDueDate || '—'}</td>
                                                 <td style={{color:'#ef4444'}}>₹{amountVal.toLocaleString('en-IN')}</td>
                                                 <td style={{fontWeight:'700'}}>₹{ann.toLocaleString('en-IN')}</td>
                                                 <td>{obl.category}</td>
