@@ -223,7 +223,7 @@ function ManualTransactionForm({ accounts, todayStr, saveManualTransaction }) {
 
 function ConsoleDashboard() {
     const { 
-        metrics, accounts, incomes, obligations, transactions, alerts, loading, user, logout, 
+        metrics, accounts, incomes, obligations, transactions, alerts, loading, user, logout, changePassword,
         saveAccount, removeAccount, saveIncome, removeIncome, saveObligation, removeObligation, 
         recordEvent, saveManualTransaction, removeTransaction, getAuthHeaders 
     } = useFinance();
@@ -239,6 +239,12 @@ function ConsoleDashboard() {
     const [retirementProjection, setRetirementProjection] = useState(null);
     const [oblSortKey, setOblSortKey] = useState('instrumentName');
     const [expandedMonthEvents, setExpandedMonthEvents] = useState(new Set()); // State for expandable events
+    const [showChangePassword, setShowChangePassword] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPasswordValue, setNewPasswordValue] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [changePasswordMessage, setChangePasswordMessage] = useState('');
+    const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
 
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -262,6 +268,14 @@ function ConsoleDashboard() {
             setObligationFormCategory('HOUSEHOLD_EXPENSE'); // Reset for new obligation
         }
     }, [editingItem, activeTab, subTab]);
+
+    useEffect(() => {
+        if (activeTab !== 'DASHBOARD') {
+            setShowChangePassword(false);
+            setChangePasswordMessage('');
+            setChangePasswordSuccess(false);
+        }
+    }, [activeTab]);
 
     useEffect(() => {
         if (activeTab === 'PROJECTIONS' || activeTab === 'RETIREMENT' || activeTab === 'DASHBOARD' || activeTab === 'INCOME' || activeTab === 'OBLIGATIONS') {
@@ -469,13 +483,64 @@ function ConsoleDashboard() {
 
     return (
         <div className="workspace-container" style={{padding: '24px 40px'}}>
-            <header style={{display:'flex', justifyContent:'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '24px', marginBottom: '32px'}}>
+            <header style={{display:'flex', justifyContent:'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '24px', marginBottom: '32px', gap:'16px', flexWrap:'wrap'}}>
                 <div>
                     <h1 style={{fontSize: '24px', color: '#1e3a8a'}}>📊 Financial Engineering Console</h1>
                     <p style={{color: '#64748b'}}>Operator: <strong>{user}</strong></p>
                 </div>
-                <button onClick={logout} className="action-btn delete">Logout</button>
+                <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+                    {activeTab === 'DASHBOARD' && (
+                        <button onClick={() => { setShowChangePassword(!showChangePassword); setChangePasswordMessage(''); setChangePasswordSuccess(false); }} className="btn-secondary" style={{background:'white', color:'#1e3a8a', border:'1px solid #cbd5e1', padding:'10px 14px', borderRadius:'8px', fontWeight:'700', cursor:'pointer'}}>
+                            Change Password
+                        </button>
+                    )}
+                    <button onClick={logout} className="action-btn delete">Logout</button>
+                </div>
             </header>
+
+            {activeTab === 'DASHBOARD' && showChangePassword && (
+                <div className="form-panel" style={{marginBottom:'24px', maxWidth:'500px'}}>
+                    <h3 style={{marginTop:0}}>Update Password</h3>
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (newPasswordValue !== confirmNewPassword) {
+                            setChangePasswordSuccess(false);
+                            setChangePasswordMessage('New passwords do not match.');
+                            return;
+                        }
+                        if (newPasswordValue.length < 6) {
+                            setChangePasswordSuccess(false);
+                            setChangePasswordMessage('Password must be at least 6 characters.');
+                            return;
+                        }
+                        const success = await changePassword(currentPassword, newPasswordValue);
+                        if (success) {
+                            setChangePasswordSuccess(true);
+                            setChangePasswordMessage('Password changed successfully.');
+                            setCurrentPassword('');
+                            setNewPasswordValue('');
+                            setConfirmNewPassword('');
+                        } else {
+                            setChangePasswordSuccess(false);
+                            setChangePasswordMessage('Current password is incorrect or the update failed.');
+                        }
+                    }} style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                        <FormField label="Current Password" tooltip="Your active sign-in password">
+                            <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required minLength={6} />
+                        </FormField>
+                        <FormField label="New Password" tooltip="Choose a new password">
+                            <input type="password" value={newPasswordValue} onChange={e => setNewPasswordValue(e.target.value)} required minLength={6} />
+                        </FormField>
+                        <FormField label="Confirm New Password" tooltip="Repeat the new passcode">
+                            <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} required minLength={6} />
+                        </FormField>
+                        <button type="submit" className="btn-primary">Save New Password</button>
+                        {changePasswordMessage && (
+                            <p style={{margin:0, color: changePasswordSuccess ? '#059669' : '#ef4444', fontSize:'13px'}}>{changePasswordMessage}</p>
+                        )}
+                    </form>
+                </div>
+            )}
 
             <nav style={{display: 'flex', gap: '8px', marginBottom: '32px', flexWrap: 'wrap'}}>
                 {['DASHBOARD', 'ACCOUNTS', 'INCOME', 'OBLIGATIONS', 'TRANSACTIONS', 'PROJECTIONS', 'RETIREMENT', 'DATA_MANAGEMENT'].map(tab => (
@@ -503,6 +568,13 @@ function ConsoleDashboard() {
                         <div className="metric-display-panel" style={{borderLeft: '5px solid #8b5cf6'}}>
                             <label className="panel-label">Total Death Cover</label>
                             <h3 className="panel-amount">₹{metrics.totalDeathBenefit?.toLocaleString('en-IN')}</h3>
+                        </div>
+                    </div>
+
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'16px'}}>
+                        <div className="metric-display-panel" style={{borderLeft: '5px solid #f97316'}}>
+                            <label className="panel-label">Current Month Expected Spend</label>
+                            <h3 className="panel-amount">₹{metrics.currentMonthExpectedSpend?.toLocaleString('en-IN') || '0'}</h3>
                         </div>
                     </div>
 

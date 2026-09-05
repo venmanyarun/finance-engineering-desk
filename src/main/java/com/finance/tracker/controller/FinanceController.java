@@ -115,6 +115,13 @@ public class FinanceController {
         metrics.put("savingsRate", savingsRate);
 
         YearMonth currentMonth = YearMonth.now();
+        BigDecimal currentMonthExpectedSpend = BigDecimal.ZERO;
+        for (RecurringObligation obligation : obligations) {
+            if (obligation.getNextDueDate() != null && YearMonth.from(obligation.getNextDueDate()).equals(currentMonth)) {
+                currentMonthExpectedSpend = currentMonthExpectedSpend.add(obligation.getAmount() != null ? obligation.getAmount() : BigDecimal.ZERO);
+            }
+        }
+
         BigDecimal monthlyExpenseTotal = BigDecimal.ZERO;
         BigDecimal monthlyCreditCardSpend = BigDecimal.ZERO; // New metric for credit card spend
         Map<String, BigDecimal> monthlyExpenseByCategory = new HashMap<>();
@@ -131,6 +138,7 @@ public class FinanceController {
                 }
             }
         }
+        metrics.put("currentMonthExpectedSpend", currentMonthExpectedSpend);
         metrics.put("monthlyExpenseTotal", monthlyExpenseTotal);
         metrics.put("monthlyExpenseByCategory", monthlyExpenseByCategory);
         metrics.put("monthlyCreditCardSpend", monthlyCreditCardSpend); // Add to metrics

@@ -7,6 +7,7 @@ export function FinanceProvider({ children }) {
         totalAssets: 0, totalLiabilities: 0, netWorth: 0, 
         assetAllocation: {},
         monthlyInflow: 0, monthlyOutflow: 0, monthlySurplus: 0,
+        currentMonthExpectedSpend: 0,
         monthlyExpenseTotal: 0,
         monthlyExpenseByCategory: {},
         monthlyCreditCardSpend: 0 // Added monthlyCreditCardSpend
@@ -89,7 +90,7 @@ export function FinanceProvider({ children }) {
         localStorage.removeItem('token');
         localStorage.removeItem('username');
         setUser(null);
-        setMetrics({ totalAssets: 0, totalLiabilities: 0, netWorth: 0, assetAllocation: {}, monthlyInflow: 0, monthlyOutflow: 0, monthlySurplus: 0, monthlyExpenseTotal: 0, monthlyExpenseByCategory: {}, monthlyCreditCardSpend: 0 });
+        setMetrics({ totalAssets: 0, totalLiabilities: 0, netWorth: 0, assetAllocation: {}, monthlyInflow: 0, monthlyOutflow: 0, monthlySurplus: 0, currentMonthExpectedSpend: 0, monthlyExpenseTotal: 0, monthlyExpenseByCategory: {}, monthlyCreditCardSpend: 0 });
         setAccounts([]);
         setIncomes([]);
         setObligations([]);
@@ -213,13 +214,22 @@ export function FinanceProvider({ children }) {
         return res.ok;
     };
 
+    const changePassword = async (currentPassword, newPassword) => {
+        const res = await fetch('http://localhost:8080/api/auth/change-password', {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword, newPassword })
+        });
+        return res.ok;
+    };
+
 
     return (
         <FinanceContext.Provider value={{
             metrics, accounts, incomes, obligations, transactions, alerts, loading, user,
             login, register, logout, saveAccount, removeAccount, saveIncome, removeIncome,
             saveObligation, removeObligation, recordEvent, saveManualTransaction, removeTransaction,
-            fetchCoreTelemetry, getAuthHeaders, requestPasswordReset, validateResetToken, resetPassword
+            fetchCoreTelemetry, getAuthHeaders, requestPasswordReset, validateResetToken, resetPassword, changePassword
         }}>
             {children}
         </FinanceContext.Provider>
