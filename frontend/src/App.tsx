@@ -229,6 +229,7 @@ function ConsoleDashboard() {
     } = useFinance();
 
     const [activeTab, setActiveTab] = useState('DASHBOARD');
+    const [projectedSpendMonths, setProjectedSpendMonths] = useState(1);
     const [subTab, setSubTab] = useState('VIEW');
     const [editingItem, setEditingItem] = useState(null);
     const [categoryTab, setCategoryTab] = useState('ALL');
@@ -383,6 +384,14 @@ function ConsoleDashboard() {
         const source = metrics.cashFlowForecast && metrics.cashFlowForecast.length ? metrics.cashFlowForecast : forecast;
         return source.slice(0, Math.min(12, source.length));
     }, [metrics.cashFlowForecast, forecast]);
+
+    const projectedSpend = useMemo(() => {
+        if (forecast.length === 0) return metrics.currentMonthExpectedSpend || 0;
+        return forecast.slice(0, projectedSpendMonths).reduce((sum, month) => {
+            const outflow = typeof month.netOutflow === 'number' ? month.netOutflow : parseFloat(month.netOutflow || 0);
+            return sum + outflow;
+        }, 0);
+    }, [forecast, metrics.currentMonthExpectedSpend, projectedSpendMonths]);
 
     const oneYearRangeLabel = useMemo(() => {
         if (oneYearForecast.length === 0) return 'next 12 months';
@@ -573,8 +582,16 @@ function ConsoleDashboard() {
 
                     <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'16px'}}>
                         <div className="metric-display-panel" style={{borderLeft: '5px solid #f97316'}}>
-                            <label className="panel-label">Current Month Expected Spend</label>
-                            <h3 className="panel-amount">₹{metrics.currentMonthExpectedSpend?.toLocaleString('en-IN') || '0'}</h3>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px'}}>
+                                <label className="panel-label">Projected Spend</label>
+                                <select value={projectedSpendMonths} onChange={e => setProjectedSpendMonths(Number(e.target.value))} aria-label="Projected spend horizon" style={{padding:'6px 8px', border:'1px solid #cbd5e1', borderRadius:'6px', color:'#475569', background:'#fff'}}>
+                                    <option value={1}>1 month</option>
+                                    <option value={3}>3 months</option>
+                                    <option value={6}>6 months</option>
+                                    <option value={12}>1 year</option>
+                                </select>
+                            </div>
+                            <h3 className="panel-amount">₹{projectedSpend.toLocaleString('en-IN')}</h3>
                         </div>
                     </div>
 
