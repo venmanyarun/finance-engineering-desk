@@ -386,8 +386,9 @@ function ConsoleDashboard() {
     }, [metrics.cashFlowForecast, forecast]);
 
     const projectedSpend = useMemo(() => {
-        if (forecast.length === 0) return metrics.currentMonthExpectedSpend || 0;
-        return forecast.slice(0, projectedSpendMonths).reduce((sum, month) => {
+        const currentMonthSpend = metrics.currentMonthExpectedSpend || 0;
+        const futureMonths = Math.max(0, projectedSpendMonths - 1);
+        return currentMonthSpend + forecast.slice(0, futureMonths).reduce((sum, month) => {
             const outflow = typeof month.netOutflow === 'number' ? month.netOutflow : parseFloat(month.netOutflow || 0);
             return sum + outflow;
         }, 0);

@@ -287,6 +287,10 @@ public class ProjectionService {
         return new ArrayList<>(projectionMap.values());
     }
 
+    public BigDecimal getCurrentMonthExpectedSpend(Long userId) {
+        return getMonthlyProjection(1, userId).get(0).totalOutflow;
+    }
+
 
     private void applyFlow(Map<YearMonth, MonthlySnapshot> map, LocalDate startDate, LocalDate endDate, RecurringObligation.PaymentFrequency freq, BigDecimal amount, boolean isInflow, String desc, YearMonth windowStart, YearMonth windowEnd) {
         if (startDate == null || freq == null || amount == null) return;
