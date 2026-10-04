@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { useFinance } from './FinanceContext';
 
 export function ImportExport() {
-    const { getAuthHeaders } = useFinance();
+    const { fetchWithAuth } = useFinance();
     const [status, setStatus] = useState('');
 
     const exportToLocal = async () => {
-        const res = await fetch('http://localhost:8080/api/finance/export', { headers: getAuthHeaders() });
+        const res = await fetchWithAuth('http://localhost:8080/api/finance/export');
         const data = await res.json();
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -19,9 +19,7 @@ export function ImportExport() {
     const downloadExcelReport = async () => {
         setStatus('Generating Excel Report...');
         try {
-            const res = await fetch('http://localhost:8080/api/finance/export-excel', { 
-                headers: getAuthHeaders() 
-            });
+            const res = await fetchWithAuth('http://localhost:8080/api/finance/export-excel');
             if (res.ok) {
                 const blob = await res.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -44,9 +42,9 @@ export function ImportExport() {
         const file = e.target.files?.[0];
         if (!file) return;
         const text = await file.text();
-        const res = await fetch('http://localhost:8080/api/finance/import', {
+        const res = await fetchWithAuth('http://localhost:8080/api/finance/import', {
             method: 'POST',
-            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: text
         });
         if (res.ok) {

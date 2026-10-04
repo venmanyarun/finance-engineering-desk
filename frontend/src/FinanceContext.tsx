@@ -25,20 +25,43 @@ export function FinanceProvider({ children }) {
         return token ? { 'Authorization': `Bearer ${token}` } : {};
     }, []);
 
+    const logout = useCallback(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('username');
+        localStorage.removeItem('rememberMe');
+        setUser(null);
+        setMetrics({ totalAssets: 0, totalLiabilities: 0, netWorth: 0, assetAllocation: {}, monthlyInflow: 0, monthlyOutflow: 0, monthlySurplus: 0, currentMonthExpectedSpend: 0, monthlyExpenseTotal: 0, monthlyExpenseByCategory: {}, monthlyCreditCardSpend: 0 });
+        setAccounts([]);
+        setIncomes([]);
+        setObligations([]);
+        setTransactions([]);
+        setAlerts([]);
+    }, []);
+
+    const fetchWithAuth = useCallback(async (url, options = {}) => {
+        const response = await fetch(url, {
+            ...options,
+            headers: { ...getAuthHeaders(), ...options.headers }
+        });
+        if ((response.status === 401 || response.status === 403) && localStorage.getItem('token')) {
+            logout();
+        }
+        return response;
+    }, [getAuthHeaders, logout]);
+
     const fetchCoreTelemetry = useCallback(async () => {
         if (!localStorage.getItem('token')) {
             setLoading(false);
             return;
         }
         try {
-            const headers = getAuthHeaders();
             const [resMetrics, resAccounts, resIncomes, resObligations, resTransactions, resAlerts] = await Promise.all([
-                fetch('http://localhost:8080/api/finance/dashboard-summary', { headers }).then(r => r.json()),
-                fetch('http://localhost:8080/api/finance/accounts', { headers }).then(r => r.json()),
-                fetch('http://localhost:8080/api/finance/income', { headers }).then(r => r.json()),
-                fetch('http://localhost:8080/api/finance/obligations', { headers }).then(r => r.json()),
-                fetch('http://localhost:8080/api/finance/transactions', { headers }).then(r => r.json()),
-                fetch('http://localhost:8080/api/finance/active-alerts?lookaheadDays=30', { headers }).then(r => r.json())
+                fetchWithAuth('http://localhost:8080/api/finance/dashboard-summary').then(r => r.json()),
+                fetchWithAuth('http://localhost:8080/api/finance/accounts').then(r => r.json()),
+                fetchWithAuth('http://localhost:8080/api/finance/income').then(r => r.json()),
+                fetchWithAuth('http://localhost:8080/api/finance/obligations').then(r => r.json()),
+                fetchWithAuth('http://localhost:8080/api/finance/transactions').then(r => r.json()),
+                fetchWithAuth('http://localhost:8080/api/finance/active-alerts?lookaheadDays=30').then(r => r.json())
             ]);
             setMetrics(resMetrics);
             setAccounts(resAccounts);
@@ -51,7 +74,7 @@ export function FinanceProvider({ children }) {
         } finally {
             setLoading(false);
         }
-    }, [getAuthHeaders]);
+    }, [fetchWithAuth]);
 
     useEffect(() => {
         const savedUser = localStorage.getItem('username');
@@ -86,20 +109,8 @@ export function FinanceProvider({ children }) {
         return res.ok;
     };
 
-    const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('username');
-        setUser(null);
-        setMetrics({ totalAssets: 0, totalLiabilities: 0, netWorth: 0, assetAllocation: {}, monthlyInflow: 0, monthlyOutflow: 0, monthlySurplus: 0, currentMonthExpectedSpend: 0, monthlyExpenseTotal: 0, monthlyExpenseByCategory: {}, monthlyCreditCardSpend: 0 });
-        setAccounts([]);
-        setIncomes([]);
-        setObligations([]);
-        setTransactions([]);
-        setAlerts([]);
-    };
-
     const saveAccount = async (account) => {
-        await fetch('http://localhost:8080/api/finance/accounts', {
+        await fetchWithAuth('http://localhost:8080/api/finance/accounts', {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(account)
@@ -108,7 +119,7 @@ export function FinanceProvider({ children }) {
     };
 
     const removeAccount = async (id) => {
-        await fetch(`http://localhost:8080/api/finance/accounts/${id}`, {
+        await fetchWithAuth(`http://localhost:8080/api/finance/accounts/${id}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -116,7 +127,7 @@ export function FinanceProvider({ children }) {
     };
 
     const saveIncome = async (income) => {
-        await fetch('http://localhost:8080/api/finance/income', {
+        await fetchWithAuth('http://localhost:8080/api/finance/income', {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(income)
@@ -125,7 +136,7 @@ export function FinanceProvider({ children }) {
     };
 
     const removeIncome = async (id) => {
-        await fetch(`http://localhost:8080/api/finance/income/${id}`, {
+        await fetchWithAuth(`http://localhost:8080/api/finance/income/${id}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -133,7 +144,7 @@ export function FinanceProvider({ children }) {
     };
 
     const saveObligation = async (obligation) => {
-        await fetch('http://localhost:8080/api/finance/obligations', {
+        await fetchWithAuth('http://localhost:8080/api/finance/obligations', {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(obligation)
@@ -142,7 +153,7 @@ export function FinanceProvider({ children }) {
     };
 
     const removeObligation = async (id) => {
-        await fetch(`http://localhost:8080/api/finance/obligations/${id}`, {
+        await fetchWithAuth(`http://localhost:8080/api/finance/obligations/${id}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -150,7 +161,7 @@ export function FinanceProvider({ children }) {
     };
 
     const recordEvent = async (id, type) => {
-        const res = await fetch('http://localhost:8080/api/finance/transactions/record-event', {
+        const res = await fetchWithAuth('http://localhost:8080/api/finance/transactions/record-event', {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, type })
@@ -163,7 +174,7 @@ export function FinanceProvider({ children }) {
     };
 
     const saveManualTransaction = async (tx) => {
-        await fetch('http://localhost:8080/api/finance/transactions/manual', {
+        await fetchWithAuth('http://localhost:8080/api/finance/transactions/manual', {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(tx)
@@ -172,7 +183,7 @@ export function FinanceProvider({ children }) {
     };
 
     const removeTransaction = async (id) => {
-        const res = await fetch(`http://localhost:8080/api/finance/transactions/${id}`, {
+        const res = await fetchWithAuth(`http://localhost:8080/api/finance/transactions/${id}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
@@ -215,7 +226,7 @@ export function FinanceProvider({ children }) {
     };
 
     const changePassword = async (currentPassword, newPassword) => {
-        const res = await fetch('http://localhost:8080/api/auth/change-password', {
+        const res = await fetchWithAuth('http://localhost:8080/api/auth/change-password', {
             method: 'POST',
             headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ currentPassword, newPassword })
@@ -229,7 +240,7 @@ export function FinanceProvider({ children }) {
             metrics, accounts, incomes, obligations, transactions, alerts, loading, user,
             login, register, logout, saveAccount, removeAccount, saveIncome, removeIncome,
             saveObligation, removeObligation, recordEvent, saveManualTransaction, removeTransaction,
-            fetchCoreTelemetry, getAuthHeaders, requestPasswordReset, validateResetToken, resetPassword, changePassword
+            fetchCoreTelemetry, getAuthHeaders, fetchWithAuth, requestPasswordReset, validateResetToken, resetPassword, changePassword
         }}>
             {children}
         </FinanceContext.Provider>

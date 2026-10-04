@@ -225,7 +225,7 @@ function ConsoleDashboard() {
     const { 
         metrics, accounts, incomes, obligations, transactions, alerts, loading, user, logout, changePassword,
         saveAccount, removeAccount, saveIncome, removeIncome, saveObligation, removeObligation, 
-        recordEvent, saveManualTransaction, removeTransaction, getAuthHeaders 
+        recordEvent, saveManualTransaction, removeTransaction, fetchWithAuth
     } = useFinance();
 
     const [activeTab, setActiveTab] = useState('DASHBOARD');
@@ -281,7 +281,7 @@ function ConsoleDashboard() {
     useEffect(() => {
         if (activeTab === 'PROJECTIONS' || activeTab === 'RETIREMENT' || activeTab === 'DASHBOARD' || activeTab === 'INCOME' || activeTab === 'OBLIGATIONS') {
             const fetchForecast = async () => {
-                const res = await fetch(`http://localhost:8080/api/finance/forecast?years=30`, { headers: getAuthHeaders() });
+                const res = await fetchWithAuth(`http://localhost:8080/api/finance/forecast?years=30`);
                 if (res.ok) {
                     const data = await res.json();
                     setForecast(data);
@@ -293,7 +293,7 @@ function ConsoleDashboard() {
             };
             fetchForecast();
         }
-    }, [activeTab, user, getAuthHeaders, incomes, obligations, startMonth]);
+    }, [activeTab, user, fetchWithAuth, incomes, obligations, startMonth]);
 
     useEffect(() => {
         const fetchRetirementProjection = async () => {
@@ -301,7 +301,7 @@ function ConsoleDashboard() {
                 setRetirementProjection(null);
                 return;
             }
-            const res = await fetch(`http://localhost:8080/api/finance/retirement-projection?fromMonth=${startMonth}&toMonth=${endMonth}`, { headers: getAuthHeaders() });
+            const res = await fetchWithAuth(`http://localhost:8080/api/finance/retirement-projection?fromMonth=${startMonth}&toMonth=${endMonth}`);
             if (res.ok) {
                 setRetirementProjection(await res.json());
             } else {
@@ -309,7 +309,7 @@ function ConsoleDashboard() {
             }
         };
         fetchRetirementProjection();
-    }, [activeTab, startMonth, endMonth, getAuthHeaders, accounts, obligations, user]);
+    }, [activeTab, startMonth, endMonth, fetchWithAuth, accounts, obligations, user]);
 
     const chartData = useMemo(() => {
         let cumulativeNetWorth = metrics.netWorth || 0;
