@@ -15,6 +15,62 @@ function FormField({ label, tooltip, children }) {
     );
 }
 
+function parseLocalDate(dateString) {
+    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return null;
+
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+        ? date
+        : null;
+}
+
+function addMonths(date, months) {
+    const next = new Date(date.getFullYear(), date.getMonth() + months, 1);
+    const lastDayOfMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(date.getDate(), lastDayOfMonth));
+    return next;
+}
+
+function getTermLeft(endDate, nextDueDate, frequency) {
+    if (!endDate) return 'Ongoing';
+
+    const end = parseLocalDate(endDate);
+    const due = parseLocalDate(nextDueDate);
+    if (!end || !due) return '—';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (end <= today) return 'Ended';
+
+    const monthsPerOccurrence = {
+        MONTHLY: 1,
+        QUARTERLY: 3,
+        YEARLY: 12,
+        ONE_TIME: 0
+    }[frequency];
+    if (monthsPerOccurrence === undefined) return '—';
+
+    if (frequency === 'ONE_TIME') {
+        return due >= today && due <= end ? '1 payment' : '0 payments';
+    }
+
+    while (due < today) {
+        const next = addMonths(due, monthsPerOccurrence);
+        if (next <= due) return '—';
+        due.setTime(next.getTime());
+    }
+
+    let payments = 0;
+    while (due <= end) {
+        payments++;
+        const next = addMonths(due, monthsPerOccurrence);
+        if (next <= due) return '—';
+        due.setTime(next.getTime());
+    }
+    return `${payments} ${payments === 1 ? 'payment' : 'payments'}`;
+}
+
 function AuthForms() {
     const { login, register, requestPasswordReset, validateResetToken, resetPassword } = useFinance();
     const [isLogin, setIsLogin] = useState(true);
@@ -944,7 +1000,7 @@ function ConsoleDashboard() {
                                 </div>
                             </div>
                             <table className="crud-table">
-                                <thead><tr><th>Obligation</th><th>Frequency</th><th>Next Due Date</th><th>Amount</th><th>Annualized</th><th>Category</th><th>Source</th><th>Actions</th></tr></thead>
+                                <thead><tr><th>Obligation</th><th>Frequency</th><th>Next Due Date</th><th>Term Left</th><th>Amount</th><th>Annualized</th><th>Category</th><th>Source</th><th>Actions</th></tr></thead>
                                 <tbody>
                                     {filteredObligations.map(obl => {
                                         const amountVal = typeof obl.amount === 'number' ? obl.amount : parseFloat(obl.amount || '0');
@@ -959,6 +1015,7 @@ function ConsoleDashboard() {
                                                 </td>
                                                 <td>{obl.frequency}</td>
                                                 <td>{obl.nextDueDate || '—'}</td>
+                                                <td>{getTermLeft(obl.endDate, obl.nextDueDate, obl.frequency)}</td>
                                                 <td style={{color:'#ef4444'}}>₹{amountVal.toLocaleString('en-IN')}</td>
                                                 <td style={{fontWeight:'700'}}>₹{ann.toLocaleString('en-IN')}</td>
                                                 <td>{obl.category}</td>
